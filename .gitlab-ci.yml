@@ -23,6 +23,21 @@ build:
   only:
     - master
 
+pages:
+  stage: build
+  environment: production
+  script:
+    - mkdir .public
+    - cp -r ./static/* .public/static
+    - cp -r ./templates/* .public
+    - rm -rf public
+    - mv .public public
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
 release:
   stage: containerize
   extends: .go-release
