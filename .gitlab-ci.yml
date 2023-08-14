@@ -27,7 +27,7 @@ pages:
   stage: build
   environment: production
   script:
-    - mkdir .public
+    - mkdir -p .public/static
     - cp -r ./static/* .public/static
     - cp -r ./templates/* .public
     - rm -rf public
