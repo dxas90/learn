@@ -22,8 +22,6 @@ default:
   image:
     name: goreleaser/goreleaser
     entrypoint: ['']
-  only:
-    - tags
   variables:
     # Disable shallow cloning so that goreleaser can diff between tags to
     # generate a changelog.
