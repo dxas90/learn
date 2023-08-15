@@ -44,6 +44,11 @@ build-%:
 build: clean
 	@${SELF} build-${APP_NAME}
 
+kaniko:
+	@mkdir -p /kaniko/.docker
+	@echo "{\"auths\":{\"$HARBOR_HOST\":{\"auth\":\"$(echo -n ${HARBOR_USERNAME}:${HARBOR_PASSWORD} | base64 | tr -d '\n')\"},\"$CI_REGISTRY\":{\"auth\":\"$(echo -n ${CI_REGISTRY_USER}:${CI_REGISTRY_PASSWORD} | base64 | tr -d '\n')\"}}}" > /kaniko/.docker/config.json
+	@/kaniko/executor --context $KANIKO_BUILD_CONTEXT --dockerfile $DOCKERFILE_PATH --destination $IMAGE_TAG --destination "${HARBOR_HOST}/${HARBOR_PROJECT}/${CI_PROJECT_NAME}:${VERSION}" ${KANIKO_ARGS}
+
 test:
 	go test -v -json ./... ; exit 0
 
