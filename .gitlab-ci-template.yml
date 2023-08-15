@@ -21,7 +21,7 @@ default:
   image:
     name: node
   script:
-    - curl -sfL https://goreleaser.com/static/run | bash -s -- release --rm-dist
+    - curl -sfL https://goreleaser.com/static/run | bash -s -- release --clean
 
 .dockerize: # https://gitlab.com/gitlab-org/gitlab-foss/-/blob/master/lib/gitlab/ci/templates/Kaniko.gitlab-ci.yml
   variables:
