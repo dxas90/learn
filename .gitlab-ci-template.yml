@@ -18,10 +18,19 @@ default:
     - go test -v .
 
 .go-release:
+  stage: release
   image:
-    name: node
+    name: goreleaser/goreleaser
+    entrypoint: ['']
+  only:
+    - tags
+  variables:
+    # Disable shallow cloning so that goreleaser can diff between tags to
+    # generate a changelog.
+    GIT_DEPTH: 0
+    GITLAB_TOKEN: $CI_JOB_TOKEN
   script:
-    - curl -sfL https://goreleaser.com/static/run | bash -s -- release --clean
+    - goreleaser release --clean
 
 .dockerize: # https://gitlab.com/gitlab-org/gitlab-foss/-/blob/master/lib/gitlab/ci/templates/Kaniko.gitlab-ci.yml
   variables:
