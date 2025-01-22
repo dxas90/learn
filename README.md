@@ -5,7 +5,7 @@ just to learn my stuff :)
 
 ### Binaries
 
-[![Releases](https://img.shields.io/github/v/release/dramirez-qb/learn.svg)](https://github.com/dramirez-qb/learn/releases) [![Releases](https://img.shields.io/github/downloads/dramirez-qb/learn/total.svg)](https://github.com/dramirez-qb/learn/releases)
+[![Releases](https://img.shields.io/github/v/release/dxas90/learn.svg)](https://github.com/dxas90/learn/releases) [![Releases](https://img.shields.io/github/downloads/dxas90/learn/total.svg)](https://github.com/dxas90/learn/releases)
 
 
 ### Docker
