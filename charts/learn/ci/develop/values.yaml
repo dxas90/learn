@@ -1,5 +1,0 @@
-image: dxas90/learn:develop
-
-labels:
-  env: "develop"
-  cluster: "eks-cluster"
