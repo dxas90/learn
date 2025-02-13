@@ -5,8 +5,6 @@ import (
 	"embed"
 	"flag"
 	"fmt"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/redis/go-redis/v9"
 	"html/template"
 	"log"
 	"math/rand"
@@ -17,6 +15,9 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/redis/go-redis/v9"
 
 	"golang.org/x/sys/unix"
 )
@@ -115,8 +116,8 @@ func fibonacci(n int) int {
 	if n <= 1 {
 		return n
 	}
-	a, b := 0, 1
-	for i := 2; i <= n; i++ {
+	a, b, i := 0, 1, 2
+	for ; i <= n; i++ {
 		a, b = b, a+b
 	}
 	return b
@@ -134,9 +135,13 @@ func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, `{"alive": true}`)
 }
 
+func pongHandler(response http.ResponseWriter, request *http.Request) {
+	fmt.Fprintf(response, "pong")
+}
+
 func fibHandler(w http.ResponseWriter, r *http.Request) {
-	rand.Seed(time.Now().UnixNano())
-	num := rand.Intn(45)
+	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
+	num := rnd.Int()
 	log.Printf("Fibonacci number for: %d", num)
 	fmt.Fprintf(w, "%d\n", fibonacci(num))
 }
