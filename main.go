@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 
@@ -35,6 +36,11 @@ var (
 	redisAddr    = getEnv("REDIS_ADDR", "localhost:6379")
 	redisPass    = getEnv("REDIS_PASSWORD", "")
 	redisDB      = getEnvInt("REDIS_DB", 0)
+	channelName  = getEnv("REDIS_CHANNEL", "micropulse")
+
+	upgrader    = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
+	clients     = make(map[*websocket.Conn]bool) // Track active WebSocket clients
+	clientsLock sync.Mutex                       // Protects clients map
 
 	rdb     *redis.Client
 	rdbOnce sync.Once
@@ -123,6 +129,65 @@ func fibonacci(n int) int {
 	return b
 }
 
+// WebSocket handler
+func websocketHandler(w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println("WebSocket upgrade failed:", err)
+		return
+	}
+
+	// Register the new client
+	clientsLock.Lock()
+	clients[conn] = true
+	clientsLock.Unlock()
+
+	log.Println("New WebSocket connection established")
+
+	// Handle client disconnection
+	defer func() {
+		clientsLock.Lock()
+		delete(clients, conn)
+		clientsLock.Unlock()
+		conn.Close()
+		log.Println("WebSocket disconnected")
+	}()
+}
+
+// Broadcast messages to all WebSocket clients
+func broadcastMessage(message string) {
+	clientsLock.Lock()
+	defer clientsLock.Unlock()
+
+	for conn := range clients {
+		err := conn.WriteMessage(websocket.TextMessage, []byte(message))
+		if err != nil {
+			log.Println("WebSocket send error:", err)
+			conn.Close()
+			delete(clients, conn)
+		}
+	}
+}
+
+// Redis subscription listener
+func subscribeToRedis() {
+	if rdb == nil {
+		log.Println("Redis client is not initialized.")
+		return
+	}
+
+	sub := rdb.Subscribe(ctx, channelName)
+	defer sub.Close()
+	ch := sub.Channel()
+
+	log.Printf("Subscribed to Redis channel: %s", channelName)
+
+	for msg := range ch {
+		log.Printf("Broadcasting message: %s", msg.Payload)
+		broadcastMessage(msg.Payload) // Send to all WebSockets
+	}
+}
+
 // Handlers
 func redisHandler(w http.ResponseWriter, r *http.Request) {
 	value := getValue(getEnv("REDIS_VALUE", defaultValue))
@@ -190,7 +255,11 @@ func main() {
 	http.Handle("/healthz", recoverHandler(healthCheckHandler))
 	http.Handle("/metrics", promhttp.Handler())
 	http.Handle("/redis", recoverHandler(withLogging(redisHandler)))
+	http.HandleFunc("/ws", recoverHandler(withLogging(websocketHandler))) // Register WebSocket route
 	http.Handle("/static/", http.FileServer(http.FS(content)))
+
+	// Start Redis subscriber in a Goroutine
+	go subscribeToRedis()
 
 	// Start server
 	log.Printf("Starting server on port %s\n", port)

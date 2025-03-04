@@ -39,9 +39,13 @@ podAnnotations: {}
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
 podLabels: {}
 
+# This sets the security context for the pod.
+# More information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
 podSecurityContext:
   fsGroup: 65534
 
+# This sets the security context for the container.
+# More information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
 securityContext:
   capabilities:
     drop:
@@ -74,6 +78,8 @@ ingress:
   #    hosts:
   #      - chart-example.local
 
+# This is for setting resource requests and limits for the container.
+# More information can be found here: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious
   # choice for the user. This also increases chances charts run on environments with little
@@ -100,7 +106,6 @@ readinessProbe:
   initialDelaySeconds: 5
   periodSeconds: 10
 
-
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: false
@@ -119,9 +124,12 @@ volumeMounts:
   - name: cache-volume
     mountPath: "/cache"
 
-
+# This is for setting node selectors for the pod.
+# More information can be found here: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector
 nodeSelector: {}
 
+# This is for setting tolerations for the pod.
+# More information can be found here: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
 tolerations:
   - key: kiam-server
     operator: Equal
@@ -132,6 +140,8 @@ tolerations:
     value: "false"
     effect: NoSchedule
 
+# This is for setting affinity rules for the pod.
+# More information can be found here: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#affinity-and-anti-affinity
 affinity: {}
 
 # This is for setting up the extra environment variables more information can be found here: https://kubernetes.io/docs/tasks/inject-data-application/define-environment-variable-container/

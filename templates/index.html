@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html>
    <head>
          <meta charset="UTF-8">
@@ -10,5 +9,34 @@
    </head>
    <body>
      <div class="welcome center">Welcome: {{.Name}}, it is {{.Time}}, USER: {{.User}} Redis Value: {{.RedisValue}}</div>
+
+     <!-- New div for WebSocket data -->
+     <div id="wsValue"></div>
+
+     <script>
+       // Assuming the WebSocket server is the same as the page server
+       const socket = new WebSocket('ws://' + window.location.hostname + ':8080'); // Replace 8080 with your WebSocket port if different
+
+       // Event listener for when the connection is opened
+       socket.onopen = function() {
+           console.log('WebSocket connection established');
+       };
+
+       // Event listener for when a message is received
+       socket.onmessage = function(event) {
+           const data = event.data;
+           document.getElementById('wsValue').innerText = 'Received WebSocket Data: ' + data;
+       };
+
+       // Event listener for when the connection is closed
+       socket.onclose = function() {
+           console.log('WebSocket connection closed');
+       };
+
+       // Error handling
+       socket.onerror = function(error) {
+           console.error('WebSocket Error: ', error);
+       };
+     </script>
    </body>
 </html>
