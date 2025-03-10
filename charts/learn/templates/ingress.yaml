@@ -1,14 +1,8 @@
 {{- if .Values.ingress.enabled -}}
-{{- $fullName := include "learn.fullname" . -}}
-{{- $svcPort := .Values.service.port -}}
-{{- if semverCompare ">=1.14-0" .Capabilities.KubeVersion.GitVersion -}}
 apiVersion: networking.k8s.io/v1
-{{- else -}}
-apiVersion: extensions/v1beta1
-{{- end }}
 kind: Ingress
 metadata:
-  name: {{ $fullName }}
+  name: {{ include "learn.fullname" . }}
   labels:
     {{- include "learn.labels" . | nindent 4 }}
   {{- with .Values.ingress.annotations }}
@@ -16,6 +10,9 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
   {{- if .Values.ingress.tls }}
   tls:
     {{- range .Values.ingress.tls }}
@@ -23,9 +20,7 @@ spec:
         {{- range .hosts }}
         - {{ . | quote }}
         {{- end }}
-      {{- if .secretName }}
       secretName: {{ .secretName }}
-      {{- end }}
     {{- end }}
   {{- end }}
   rules:
@@ -35,9 +30,14 @@ spec:
         paths:
           {{- range .paths }}
           - path: {{ .path }}
+            {{- with .pathType }}
+            pathType: {{ . }}
+            {{- end }}
             backend:
-              serviceName: {{ $fullName }}
-              servicePort: {{ $svcPort }}
+              service:
+                name: {{ include "learn.fullname" $ }}
+                port:
+                  number: {{ $.Values.service.port }}
           {{- end }}
     {{- end }}
-  {{- end }}
+{{- end }}

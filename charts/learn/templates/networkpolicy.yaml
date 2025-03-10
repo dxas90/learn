@@ -10,7 +10,4 @@ spec:
   podSelector:
     matchLabels: {}
   ingress:
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              purpose: infrastructure
+    - {}
