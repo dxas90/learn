@@ -3,6 +3,7 @@ FROM golang:1.24.6-alpine AS builder
 RUN mkdir /build
 ADD . /build/
 WORKDIR /build
+ENV GOPROXY=https://proxy.golang.org,direct
 RUN go mod tidy && go mod vendor
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags '-extldflags "-static"' -o main .
 
