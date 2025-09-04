@@ -49,7 +49,6 @@ spec:
                 name: learn-config
           resources:
             limits:
-              cpu: 5m
               memory: 16Mi
             requests:
               cpu: 5m
@@ -89,8 +88,7 @@ spec:
               containerPort: 8080 # line 12
               protocol: TCP
           resources:
-            limits:
-              cpu: 25m
+            limits:  # https://home.robusta.dev/blog/stop-using-cpu-limits
               memory: 263M
             requests:
               cpu: 25m

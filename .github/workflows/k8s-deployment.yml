@@ -10,11 +10,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: AbsaOSS/k3d-action@v1.4.0
-        name: "Create Single Cluster"
+      - name: Setup Kind Cluster
+        uses: helm/kind-action@v1.10.0
         with:
-          cluster-name: "test-cluster-1"
-          args: --agents 1
+          version: v0.29.0
+          kubectl_version: v1.30.4
+          cluster_name: test-cluster-1
+          verbosity: 1
       - name: "Deploy to KinD"
         id: local-path
         run: |
