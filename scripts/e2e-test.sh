@@ -75,8 +75,39 @@ validate_container_image() {
     local image=$(kubectl get deployment ${DEPLOYMENT_NAME} -o jsonpath='{.spec.template.spec.containers[0].image}')
     log_info "Testing image: ${image}"
     
-    # Create a test pod to verify image can be pulled and runs
-    kubectl run test-pod --image=${image} --restart=Never --command -- sleep 30
+    # Create a test pod to verify image can be pulled and starts successfully
+    # Since the image is based on scratch, we use the actual entrypoint instead of sleep
+    cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-pod
+  labels:
+    test: image-validation
+spec:
+  containers:
+  - name: test-container
+    image: ${image}
+    # Use the same environment variables as the main deployment to ensure it starts properly
+    env:
+    - name: MY_NAMESPACE
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
+    - name: POD_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name
+    ports:
+    - containerPort: 8080
+    readinessProbe:
+      httpGet:
+        path: /healthz
+        port: 8080
+      initialDelaySeconds: 5
+      periodSeconds: 10
+  restartPolicy: Never
+EOF
     
     # Wait for pod to be running
     log_info "Waiting for test pod to be running..."
@@ -85,9 +116,12 @@ validate_container_image() {
     # Check if the container started successfully
     if kubectl get pod test-pod -o jsonpath='{.status.phase}' | grep -q "Running"; then
         log_success "Container image validation successful"
+        log_info "Test pod is healthy and responding to readiness probe"
     else
         log_error "Container image validation failed"
+        log_error "Pod status: $(kubectl get pod test-pod -o jsonpath='{.status.phase}')"
         kubectl describe pod test-pod
+        kubectl logs test-pod || true
         exit 1
     fi
     
