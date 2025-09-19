@@ -83,11 +83,21 @@ check_service() {
 quick_endpoint_test() {
     log_info "Running quick endpoint test..."
     
-    # Create a quick test pod
+    # Get service cluster IP directly (more reliable than DNS lookup)
+    local service_ip=$(kubectl get service learn -o jsonpath='{.spec.clusterIP}')
+    local service_port=$(kubectl get service learn -o jsonpath='{.spec.ports[0].port}')
+    
+    if [[ -z "${service_ip}" || "${service_ip}" == "None" ]]; then
+        log_error "Could not get service cluster IP"
+        return 1
+    fi
+    
+    log_info "Testing health endpoint at ${service_ip}:${service_port}/healthz"
+    
+    # Create a quick test pod with direct service IP
     kubectl run smoke-test --image=curlimages/curl:latest --restart=Never --rm -i --timeout=${TIMEOUT_SECONDS}s -- /bin/sh -c "
-        SERVICE_IP=\$(nslookup learn.default.svc.cluster.local | grep Address | tail -1 | awk '{print \$2}')
-        echo \"Testing health endpoint at \$SERVICE_IP:8080/healthz\"
-        if curl -s -f http://\$SERVICE_IP:8080/healthz | grep -q 'alive'; then
+        echo \"Testing health endpoint at ${service_ip}:${service_port}/healthz\"
+        if curl -s -f http://${service_ip}:${service_port}/healthz | grep -q 'alive'; then
             echo '✓ Health endpoint test passed'
         else
             echo '✗ Health endpoint test failed'
