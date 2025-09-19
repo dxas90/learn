@@ -48,6 +48,12 @@ jobs:
           kubectl wait --for=condition=Ready pods --all --timeout=5m
           kubectl get pods
           
+      - name: "Run Smoke Test"
+        run: |
+          echo "Running quick smoke test..."
+          chmod +x scripts/smoke-test.sh
+          ./scripts/smoke-test.sh
+          
       - name: "Run Comprehensive E2E Tests"
         run: |
           echo "Starting comprehensive end-to-end testing..."
