@@ -29,7 +29,7 @@ jobs:
           docker build -t ${APP_IMAGE}:${LAST_COMMIT_HASH} .
           docker tag ${APP_IMAGE}:${LAST_COMMIT_HASH} ${APP_IMAGE}:latest
           echo "Loading image into KinD cluster..."
-          kind load docker-image ${APP_IMAGE}:latest --name test-cluster-1
+          kind load docker-image ${APP_IMAGE}:${LAST_COMMIT_HASH} --name test-cluster-1
           
       - name: "Deploy to KinD"
         id: deploy
@@ -42,8 +42,12 @@ jobs:
           kubectl get nodes
           echo "cluster-info ..."
           kubectl cluster-info
-          echo "Deploying application..."
-          kubectl apply -k k8s
+          echo "Preparing E2E overlay with commit hash: ${LAST_COMMIT_HASH}"
+          # Substitute the environment variable in the kustomization file
+          sed "s/\${LAST_COMMIT_HASH}/${LAST_COMMIT_HASH}/g" k8s/overlays/e2e/kustomization.yaml > /tmp/kustomization-e2e.yaml
+          cp /tmp/kustomization-e2e.yaml k8s/overlays/e2e/kustomization.yaml
+          echo "Deploying application with E2E overlay..."
+          kubectl apply -k k8s/overlays/e2e
           echo "waiting for pods to be ready ..."
           kubectl wait --for=condition=Ready pods --all --timeout=5m
           kubectl get pods
