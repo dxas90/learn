@@ -39,6 +39,7 @@ log_error() {
 # Cleanup function
 cleanup() {
     log_info "Cleaning up test resources..."
+    kubectl delete pod test-pod-image-validation --ignore-not-found=true
     kubectl delete pod test-pod --ignore-not-found=true
     kubectl delete job/curl-test --ignore-not-found=true
 }
@@ -81,7 +82,7 @@ validate_container_image() {
 apiVersion: v1
 kind: Pod
 metadata:
-  name: test-pod
+  name: test-pod-image-validation
   labels:
     test: image-validation
 spec:
@@ -111,22 +112,22 @@ EOF
     
     # Wait for pod to be running
     log_info "Waiting for test pod to be running..."
-    kubectl wait --for=condition=Ready pod/test-pod --timeout=60s
+    kubectl wait --for=condition=Ready pod/test-pod-image-validation --timeout=60s
     
     # Check if the container started successfully
-    if kubectl get pod test-pod -o jsonpath='{.status.phase}' | grep -q "Running"; then
+    if kubectl get pod test-pod-image-validation -o jsonpath='{.status.phase}' | grep -q "Running"; then
         log_success "Container image validation successful"
         log_info "Test pod is healthy and responding to readiness probe"
     else
         log_error "Container image validation failed"
-        log_error "Pod status: $(kubectl get pod test-pod -o jsonpath='{.status.phase}')"
-        kubectl describe pod test-pod
-        kubectl logs test-pod || true
+        log_error "Pod status: $(kubectl get pod test-pod-image-validation -o jsonpath='{.status.phase}')"
+        kubectl describe pod test-pod-image-validation
+        kubectl logs test-pod-image-validation || true
         exit 1
     fi
     
     # Cleanup test pod
-    kubectl delete pod test-pod
+    kubectl delete pod test-pod-image-validation
 }
 
 # Validate Kubernetes resources
