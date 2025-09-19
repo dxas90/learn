@@ -50,32 +50,32 @@ trap cleanup EXIT
 # Validate KinD cluster is ready
 validate_cluster() {
     log_info "Validating KinD cluster readiness..."
-    
+
     # Check cluster info
     if ! kubectl cluster-info >/dev/null 2>&1; then
         log_error "Cannot connect to Kubernetes cluster"
         exit 1
     fi
-    
+
     # Wait for nodes to be ready
     log_info "Waiting for all nodes to be ready..."
     kubectl wait --for=condition=Ready nodes --all --timeout=${TIMEOUT_SECONDS}s
-    
+
     # Display cluster information
     log_info "Cluster nodes:"
     kubectl get nodes -o wide
-    
+
     log_success "Cluster validation completed"
 }
 
 # Validate container image
 validate_container_image() {
     log_info "Validating container image accessibility..."
-    
+
     # Get the image from deployment
     local image=$(kubectl get deployment ${DEPLOYMENT_NAME} -o jsonpath='{.spec.template.spec.containers[0].image}')
     log_info "Testing image: ${image}"
-    
+
     # Create a test pod to verify image can be pulled and starts successfully
     # Since the image is based on scratch, we use the actual entrypoint instead of sleep
     cat <<EOF | kubectl apply -f -
@@ -109,11 +109,11 @@ spec:
       periodSeconds: 10
   restartPolicy: Never
 EOF
-    
+
     # Wait for pod to be running
     log_info "Waiting for test pod to be running..."
     kubectl wait --for=condition=Ready pod/test-pod-image-validation --timeout=60s
-    
+
     # Check if the container started successfully
     if kubectl get pod test-pod-image-validation -o jsonpath='{.status.phase}' | grep -q "Running"; then
         log_success "Container image validation successful"
@@ -125,7 +125,7 @@ EOF
         kubectl logs test-pod-image-validation || true
         exit 1
     fi
-    
+
     # Cleanup test pod
     kubectl delete pod test-pod-image-validation
 }
@@ -133,22 +133,22 @@ EOF
 # Validate Kubernetes resources
 validate_k8s_resources() {
     log_info "Validating Kubernetes resources deployment..."
-    
+
     # Check if deployment exists and is ready
     log_info "Checking deployment status..."
     kubectl wait --for=condition=Available deployment/${DEPLOYMENT_NAME} --timeout=${TIMEOUT_SECONDS}s
-    
+
     # Verify desired vs available replicas
     local desired=$(kubectl get deployment ${DEPLOYMENT_NAME} -o jsonpath='{.spec.replicas}')
     local available=$(kubectl get deployment ${DEPLOYMENT_NAME} -o jsonpath='{.status.availableReplicas}')
-    
+
     if [[ "${available}" == "${desired}" ]]; then
         log_success "Deployment has correct number of replicas: ${available}/${desired}"
     else
         log_error "Deployment replica mismatch: ${available}/${desired}"
         exit 1
     fi
-    
+
     # Check if service exists
     log_info "Checking service status..."
     if kubectl get service ${SERVICE_NAME} >/dev/null 2>&1; then
@@ -158,11 +158,11 @@ validate_k8s_resources() {
         log_error "Service ${SERVICE_NAME} not found"
         exit 1
     fi
-    
+
     # Check pod status
     log_info "Checking pod status..."
     kubectl get pods -l app=gitops-k8s
-    
+
     # Verify all pods are running
     local pod_count=$(kubectl get pods -l app=gitops-k8s --field-selector=status.phase=Running --no-headers | wc -l)
     if [[ ${pod_count} -gt 0 ]]; then
@@ -172,20 +172,20 @@ validate_k8s_resources() {
         kubectl describe pods -l app=gitops-k8s
         exit 1
     fi
-    
+
     log_success "Kubernetes resources validation completed"
 }
 
 # Test application endpoints
 test_application_endpoints() {
     log_info "Testing application endpoints..."
-    
+
     # Get service cluster IP
     local service_ip=$(kubectl get service ${SERVICE_NAME} -o jsonpath='{.spec.clusterIP}')
     local service_port=$(kubectl get service ${SERVICE_NAME} -o jsonpath='{.spec.ports[0].port}')
-    
+
     log_info "Service endpoint: ${service_ip}:${service_port}"
-    
+
     # Create a test job to make HTTP requests from within the cluster
     cat <<EOF | kubectl apply -f -
 apiVersion: batch/v1
@@ -211,7 +211,7 @@ spec:
             echo "✗ Health endpoint test failed (HTTP \$response)"
             exit 1
           fi
-          
+
           echo "Testing ping endpoint..."
           response=\$(curl -s -w "%{http_code}" http://${service_ip}:${service_port}/ping -o /tmp/ping.out)
           if [ "\$response" = "200" ]; then
@@ -221,7 +221,7 @@ spec:
             echo "✗ Ping endpoint test failed (HTTP \$response)"
             exit 1
           fi
-          
+
           echo "Testing root endpoint..."
           response=\$(curl -s -w "%{http_code}" http://${service_ip}:${service_port}/ -o /tmp/root.out)
           if [ "\$response" = "200" ]; then
@@ -231,7 +231,7 @@ spec:
             echo "✗ Root endpoint test failed (HTTP \$response)"
             exit 1
           fi
-          
+
           echo "All endpoint tests completed successfully!"
       restartPolicy: Never
   backoffLimit: 3
@@ -240,7 +240,7 @@ EOF
     # Wait for job to complete
     log_info "Waiting for endpoint tests to complete..."
     kubectl wait --for=condition=Complete job/curl-test --timeout=120s
-    
+
     # Check job result
     if kubectl get job curl-test -o jsonpath='{.status.succeeded}' | grep -q "1"; then
         log_success "All endpoint tests passed"
@@ -252,7 +252,7 @@ EOF
         kubectl describe job curl-test
         exit 1
     fi
-    
+
     # Cleanup test job
     kubectl delete job curl-test
 }
@@ -260,10 +260,10 @@ EOF
 # Test readiness and liveness probes
 test_health_probes() {
     log_info "Testing health probes..."
-    
+
     # Check if pods are passing readiness checks
     local ready_pods=$(kubectl get pods -l app=gitops-k8s -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}')
-    
+
     if [[ "${ready_pods}" == *"True"* ]]; then
         log_success "Readiness probes are passing"
     else
@@ -271,17 +271,17 @@ test_health_probes() {
         kubectl describe pods -l app=gitops-k8s
         exit 1
     fi
-    
+
     log_success "Health probes validation completed"
 }
 
 # Test resource limits and requests
 test_resource_constraints() {
     log_info "Validating resource constraints..."
-    
+
     # Check if pods are running within resource limits
     local pod_name=$(kubectl get pods -l app=gitops-k8s -o jsonpath='{.items[0].metadata.name}')
-    
+
     # Get resource usage (if metrics server is available)
     if kubectl top pod ${pod_name} >/dev/null 2>&1; then
         log_info "Current resource usage:"
@@ -289,11 +289,11 @@ test_resource_constraints() {
     else
         log_warning "Metrics server not available, skipping resource usage check"
     fi
-    
+
     # Verify resource requests and limits are set
     local requests=$(kubectl get pod ${pod_name} -o jsonpath='{.spec.containers[0].resources.requests}')
     local limits=$(kubectl get pod ${pod_name} -o jsonpath='{.spec.containers[0].resources.limits}')
-    
+
     if [[ -n "${requests}" && -n "${limits}" ]]; then
         log_success "Resource constraints are properly configured"
         log_info "Requests: ${requests}"
@@ -306,7 +306,7 @@ test_resource_constraints() {
 # Generate test report
 generate_report() {
     log_info "Generating test report..."
-    
+
     cat <<EOF
 
 ===========================================
@@ -339,7 +339,7 @@ main() {
     log_info "Starting comprehensive end-to-end testing for KinD deployment..."
     log_info "Testing application: ${APP_NAME}"
     log_info "Namespace: ${NAMESPACE}"
-    
+
     validate_cluster
     validate_k8s_resources
     validate_container_image
@@ -347,7 +347,7 @@ main() {
     test_application_endpoints
     test_resource_constraints
     generate_report
-    
+
     log_success "All tests passed! 🎉"
 }
 

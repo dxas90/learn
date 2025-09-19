@@ -26,7 +26,7 @@ This directory contains comprehensive testing scripts for validating the KinD (K
 - ✅ Deployment and service validation
 - ✅ Quick endpoint connectivity test
 
-### 🔬 `e2e-test.sh` 
+### 🔬 `e2e-test.sh`
 **Comprehensive end-to-end testing** - The main validation suite
 - 🏗️ Cluster readiness validation
 - 📦 Container image testing
@@ -115,7 +115,7 @@ The tests are automatically executed in GitHub Actions:
 - name: "Run Smoke Test"
   run: ./scripts/smoke-test.sh
 
-- name: "Run Comprehensive E2E Tests"  
+- name: "Run Comprehensive E2E Tests"
   run: ./scripts/e2e-test.sh
 
 - name: "Run WebSocket Tests"
@@ -165,7 +165,7 @@ curl -v http://<pod-ip>:8080/healthz
 
 ### 🎯 Test Strategy
 1. **Start with smoke tests** - Quick validation
-2. **Run comprehensive E2E** - Full validation  
+2. **Run comprehensive E2E** - Full validation
 3. **Add WebSocket tests** - Real-time features
 4. **Use integration tests** - Local development
 
@@ -186,7 +186,7 @@ curl -v http://<pod-ip>:8080/healthz
 When adding new features to the application:
 
 1. **Add corresponding tests** in the appropriate script
-2. **Update test documentation** 
+2. **Update test documentation**
 3. **Verify all test scenarios** work correctly
 4. **Test in different environments** (local, CI/CD)
 
@@ -195,7 +195,7 @@ When adding new features to the application:
 Each test run provides:
 - ✅ Execution summary with pass/fail status
 - 📝 Environment details and configuration
-- 📊 Resource status and performance metrics  
+- 📊 Resource status and performance metrics
 - 🔍 Failure diagnostics (when applicable)
 
 ---
@@ -208,7 +208,7 @@ For detailed information about the testing framework, see [docs/testing.md](../d
 # Quick health check
 ./scripts/smoke-test.sh
 
-# Full validation suite  
+# Full validation suite
 ./scripts/e2e-test.sh
 
 # WebSocket testing

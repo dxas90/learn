@@ -43,46 +43,46 @@ check_environment() {
 # Test application locally
 test_local_application() {
     log_info "Testing application locally..."
-    
+
     # Start the application in background
     go run main.go &
     APP_PID=$!
-    
+
     # Wait for application to start
     sleep 5
-    
+
     # Test endpoints
     test_endpoint "http://localhost:${LOCAL_PORT}/healthz" "Health endpoint"
     test_endpoint "http://localhost:${LOCAL_PORT}/ping" "Ping endpoint"
     test_endpoint "http://localhost:${LOCAL_PORT}/" "Root endpoint"
-    
+
     # Kill the application
     kill $APP_PID || true
     wait $APP_PID 2>/dev/null || true
-    
+
     log_success "Local application testing completed"
 }
 
 # Test application in Kubernetes
 test_k8s_application() {
     log_info "Testing application in Kubernetes..."
-    
+
     # Port forward to access the service
     kubectl port-forward service/${SERVICE_NAME} ${LOCAL_PORT}:8080 &
     PF_PID=$!
-    
+
     # Wait for port forwarding to be ready
     sleep 5
-    
+
     # Test endpoints
     test_endpoint "http://localhost:${LOCAL_PORT}/healthz" "Health endpoint (K8s)"
     test_endpoint "http://localhost:${LOCAL_PORT}/ping" "Ping endpoint (K8s)"
     test_endpoint "http://localhost:${LOCAL_PORT}/" "Root endpoint (K8s)"
-    
+
     # Kill port forwarding
     kill $PF_PID || true
     wait $PF_PID 2>/dev/null || true
-    
+
     log_success "Kubernetes application testing completed"
 }
 
@@ -92,9 +92,9 @@ test_endpoint() {
     local description=$2
     local max_retries=5
     local retry_count=0
-    
+
     log_info "Testing ${description}: ${url}"
-    
+
     while [ $retry_count -lt $max_retries ]; do
         if curl -s -f "${url}" >/dev/null; then
             log_success "${description} test passed"
@@ -105,7 +105,7 @@ test_endpoint() {
             sleep 2
         fi
     done
-    
+
     log_error "${description} test failed after ${max_retries} retries"
     return 1
 }
@@ -113,33 +113,33 @@ test_endpoint() {
 # Test Docker container
 test_docker_container() {
     log_info "Testing Docker container..."
-    
+
     # Build the container
     docker build -t learn-test .
-    
+
     # Run the container
     docker run -d -p ${LOCAL_PORT}:8080 --name learn-test-container learn-test
-    
+
     # Wait for container to start
     sleep 10
-    
+
     # Test endpoints
     test_endpoint "http://localhost:${LOCAL_PORT}/healthz" "Docker Health endpoint"
     test_endpoint "http://localhost:${LOCAL_PORT}/ping" "Docker Ping endpoint"
     test_endpoint "http://localhost:${LOCAL_PORT}/" "Docker Root endpoint"
-    
+
     # Cleanup
     docker stop learn-test-container || true
     docker rm learn-test-container || true
     docker rmi learn-test || true
-    
+
     log_success "Docker container testing completed"
 }
 
 # Run unit tests
 run_unit_tests() {
     log_info "Running unit tests..."
-    
+
     if go test -v ./...; then
         log_success "Unit tests passed"
     else
@@ -151,9 +151,9 @@ run_unit_tests() {
 # Run integration tests based on environment
 run_integration_tests() {
     local environment=$(check_environment)
-    
+
     log_info "Running integration tests in ${environment} environment"
-    
+
     case $environment in
         "k8s")
             test_k8s_application
@@ -172,9 +172,9 @@ run_integration_tests() {
 # Generate integration test report
 generate_integration_report() {
     log_info "Generating integration test report..."
-    
+
     local environment=$(check_environment)
-    
+
     cat <<EOF
 
 ===========================================
@@ -210,23 +210,23 @@ EOF
 # Main execution
 main() {
     log_info "Starting integration testing for ${APP_NAME}..."
-    
+
     # Check dependencies
     if ! command -v curl >/dev/null; then
         log_error "curl is required but not installed"
         exit 1
     fi
-    
+
     if ! command -v go >/dev/null; then
         log_error "Go is required but not installed"
         exit 1
     fi
-    
+
     # Run tests
     run_unit_tests
     run_integration_tests
     generate_integration_report
-    
+
     log_success "All integration tests passed! 🎉"
 }
 
@@ -234,7 +234,7 @@ main() {
 cleanup() {
     # Kill any background processes
     jobs -p | xargs -r kill || true
-    
+
     # Cleanup Docker containers
     docker stop learn-test-container 2>/dev/null || true
     docker rm learn-test-container 2>/dev/null || true

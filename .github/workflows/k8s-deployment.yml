@@ -12,15 +12,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Setup Kind Cluster
         uses: helm/kind-action@v1.10.0
         with:
-          version: v0.29.0
-          kubectl_version: v1.30.4
           cluster_name: test-cluster-1
           verbosity: 1
-          
+
       - name: "Build and Load Docker Image"
         run: |
           export LAST_COMMIT_HASH="${GITHUB_SHA::7}"
@@ -30,7 +28,7 @@ jobs:
           docker tag ${APP_IMAGE}:${LAST_COMMIT_HASH} ${APP_IMAGE}:latest
           echo "Loading image into KinD cluster..."
           kind load docker-image ${APP_IMAGE}:${LAST_COMMIT_HASH} --name test-cluster-1
-          
+
       - name: "Deploy to KinD"
         id: deploy
         run: |
@@ -42,6 +40,8 @@ jobs:
           kubectl get nodes
           echo "cluster-info ..."
           kubectl cluster-info
+          echo "deploying metrics server ..."
+          kubectl apply -f https://raw.githubusercontent.com/dxas90/k3d-cluster/refs/heads/master/k8s/monitoring/00_metrics-server.yaml
           echo "Preparing E2E overlay with commit hash: ${LAST_COMMIT_HASH}"
           # Substitute the environment variable in the kustomization file
           sed "s/\${LAST_COMMIT_HASH}/${LAST_COMMIT_HASH}/g" k8s/overlays/e2e/kustomization.yaml > /tmp/kustomization-e2e.yaml
@@ -50,32 +50,33 @@ jobs:
           kubectl apply -k k8s/overlays/e2e
           echo "waiting for pods to be ready ..."
           kubectl wait --for=condition=Ready pods --all --timeout=5m
+          kubectl label ns default purpose=infrastructure
           kubectl get pods
-          
+
       - name: "Run Smoke Test"
         run: |
           echo "Running quick smoke test..."
           chmod +x scripts/smoke-test.sh
           ./scripts/smoke-test.sh
-          
+
       - name: "Run Comprehensive E2E Tests"
         run: |
           echo "Starting comprehensive end-to-end testing..."
           chmod +x scripts/e2e-test.sh
           ./scripts/e2e-test.sh
-          
+
       - name: "Run WebSocket Tests"
         run: |
           echo "Starting WebSocket testing..."
           chmod +x scripts/websocket-test.sh
           ./scripts/websocket-test.sh
-          
+
       - name: "Validate Deployment Health"
         run: |
           echo "Final deployment health check..."
           kubectl get all
           kubectl describe deployment learn
-          
+
           # Check if all pods are healthy
           UNHEALTHY_PODS=$(kubectl get pods --field-selector=status.phase!=Running --no-headers | wc -l)
           if [ "$UNHEALTHY_PODS" -gt 0 ]; then
@@ -83,9 +84,9 @@ jobs:
             kubectl get pods --field-selector=status.phase!=Running
             exit 1
           fi
-          
+
           echo "✅ All deployment health checks passed!"
-          
+
       - name: "Collect Logs and Debug Info"
         if: failure()
         run: |
@@ -93,18 +94,18 @@ jobs:
           echo "--- Cluster Information ---"
           kubectl cluster-info
           kubectl get nodes -o wide
-          
+
           echo "--- All Resources ---"
           kubectl get all -o wide
-          
+
           echo "--- Pod Descriptions ---"
           kubectl describe pods
-          
+
           echo "--- Pod Logs ---"
           for pod in $(kubectl get pods -o name); do
             echo "=== Logs for $pod ==="
             kubectl logs $pod --all-containers=true || true
           done
-          
+
           echo "--- Events ---"
           kubectl get events --sort-by='.metadata.creationTimestamp'
