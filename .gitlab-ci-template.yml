@@ -21,7 +21,7 @@ default:
   stage: release
   image:
     name: goreleaser/goreleaser
-    entrypoint: ['']
+    entrypoint: [""]
   variables:
     # Disable shallow cloning so that goreleaser can diff between tags to
     # generate a changelog.
@@ -93,12 +93,7 @@ default:
     - docker:dind
   before_script:
     # Install required tools
-    - apt-get update -qq && apt-get install -y -qq
-        curl
-        wget
-        ca-certificates
-        gnupg
-        lsb-release
+    - apt-get update -qq && apt-get install -y -qq curl wget ca-certificates gnupg lsb-release
     # Install Docker CLI
     - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
     - echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
@@ -133,7 +128,7 @@ default:
     - echo "Deploying metrics server..."
     - kubectl apply -f https://raw.githubusercontent.com/dxas90/k3d-cluster/refs/heads/master/k8s/monitoring/00_metrics-server.yaml
     # Prepare E2E overlay with commit hash
-    - echo "Preparing E2E overlay with commit hash: ${LAST_COMMIT_HASH}"
+    - echo "Preparing E2E overlay with commit hash ${LAST_COMMIT_HASH}"
     - sed "s/\${LAST_COMMIT_HASH}/${LAST_COMMIT_HASH}/g" k8s/overlays/e2e/kustomization.yaml > /tmp/kustomization-e2e.yaml
     - cp /tmp/kustomization-e2e.yaml k8s/overlays/e2e/kustomization.yaml
     # Deploy application
