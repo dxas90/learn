@@ -3,8 +3,9 @@ FROM golang:1.25.1-alpine AS builder
 RUN mkdir /build
 ADD . /build/
 WORKDIR /build
-# Use vendor directory to avoid network issues
-RUN CGO_ENABLED=0 GOOS=linux go build -mod=vendor -a -installsuffix cgo -ldflags '-extldflags "-static"' -o main .
+ENV GOPROXY=https://proxy.golang.org,direct
+RUN go mod tidy && go mod vendor
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags '-extldflags "-static"' -o main .
 
 FROM scratch AS production
 ARG CREATED="0000-00-00T00:00:00Z"
