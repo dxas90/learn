@@ -56,6 +56,19 @@ containerize:
 deploy-k8s:
   stage: k8s-deploy
   extends: .k8s-deployment
+  needs:
+    - job: build
+      optional: true
+    - job: build-branch
+      optional: true
   rules:
+    # Run on develop branch pushes
     - if: $CI_COMMIT_BRANCH == "develop"
+      when: on_success
+    # Run on merge requests targeting main
     - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"
+      when: on_success
+    # Allow manual execution on other branches for testing
+    - if: $CI_COMMIT_BRANCH != "develop" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME != "main"
+      when: manual
+      allow_failure: true
