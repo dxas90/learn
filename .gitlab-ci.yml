@@ -6,6 +6,7 @@ stages:
   - test
   - build
   - containerize
+  - k8s-deploy
 
 test-code:
   stage: test
@@ -51,3 +52,10 @@ containerize:
     .dockerize
     #  only:
     #    - master
+
+deploy-k8s:
+  stage: k8s-deploy
+  extends: .k8s-deployment
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"
