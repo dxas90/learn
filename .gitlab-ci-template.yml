@@ -115,10 +115,9 @@ default:
     # Set up variables and verify environment
     - export LAST_COMMIT_HASH="${CI_COMMIT_SHORT_SHA}"
     - echo "=== Starting Kubernetes Deployment Pipeline ==="
-    - echo "Commit Hash: ${LAST_COMMIT_HASH}"
-    - echo "App Image: ${APP_IMAGE}"
-    - echo "Cluster Name: ${CLUSTER_NAME}"
-    
+    - 'echo "Commit Hash: ${LAST_COMMIT_HASH}"'
+    - 'echo "App Image: ${APP_IMAGE}"'
+    - 'echo "Cluster Name: ${CLUSTER_NAME}"'
     # Build Docker image with better error handling
     - echo "=== Building Docker Image ==="
     - |
@@ -128,7 +127,6 @@ default:
       fi
     - docker tag ${APP_IMAGE}:${LAST_COMMIT_HASH} ${APP_IMAGE}:latest
     - echo "✅ Docker image built successfully"
-    
     # Create Kind cluster with configuration
     - echo "=== Setting up Kind Cluster ==="
     - |
@@ -153,18 +151,15 @@ default:
       EOF
     - kind create cluster --name ${CLUSTER_NAME} --config /tmp/kind-config.yaml --wait 5m
     - echo "✅ Kind cluster created successfully"
-    
     # Load image into Kind cluster
     - echo "=== Loading Docker Image into Cluster ==="
     - kind load docker-image ${APP_IMAGE}:${LAST_COMMIT_HASH} --name ${CLUSTER_NAME}
     - echo "✅ Image loaded into cluster"
-    
     # Wait for cluster to be ready
     - echo "=== Waiting for Cluster to be Ready ==="
     - kubectl wait --for=condition=Ready nodes --all --timeout=5m
     - kubectl get nodes -o wide
     - kubectl cluster-info
-    
     # Deploy metrics server with retry logic
     - echo "=== Deploying Metrics Server ==="
     - |
@@ -177,22 +172,19 @@ default:
           sleep 10
         fi
       done
-    
     # Prepare and deploy application
     - echo "=== Preparing Application Deployment ==="
-    - echo "Using commit hash: ${LAST_COMMIT_HASH}"
+    - 'echo "Using commit hash: ${LAST_COMMIT_HASH}"'
     - sed "s/\${LAST_COMMIT_HASH}/${LAST_COMMIT_HASH}/g" k8s/overlays/e2e/kustomization.yaml > /tmp/kustomization-e2e.yaml
     - cp /tmp/kustomization-e2e.yaml k8s/overlays/e2e/kustomization.yaml
     - echo "Applying kustomization..."
     - kubectl apply -k k8s/overlays/e2e
     - echo "✅ Application deployed"
-    
     # Wait for application to be ready
     - echo "=== Waiting for Application to be Ready ==="
     - kubectl wait --for=condition=Ready pods --all --timeout=10m
     - kubectl label ns default purpose=infrastructure
     - kubectl get pods -o wide
-    
     # Run comprehensive testing suite
     - echo "=== Running Test Suite ==="
     - echo "📋 Running smoke tests..."
@@ -202,7 +194,6 @@ default:
     - echo "📋 Running WebSocket tests..."
     - chmod +x scripts/websocket-test.sh && ./scripts/websocket-test.sh
     - echo "✅ All tests completed successfully"
-    
     # Final comprehensive health check
     - echo "=== Final Health Validation ==="
     - kubectl get all -o wide
