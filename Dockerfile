@@ -1,19 +1,11 @@
 FROM golang:1.25.1-alpine AS builder
 
-# Install ca-certificates for HTTPS requests
-RUN apk add --no-cache ca-certificates git
-
 RUN mkdir /build
 ADD . /build/
 WORKDIR /build
-
-# Set Go build environment
-ENV CGO_ENABLED=0
-ENV GOOS=linux
-ENV GOARCH=amd64
-
-# Build the application with vendor dependencies
-RUN go build -mod=vendor -a -installsuffix cgo -ldflags '-extldflags "-static" -s -w' -o main .
+ENV GOPROXY=https://proxy.golang.org,direct
+RUN go mod tidy && go mod vendor
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags '-extldflags "-static"' -o main .
 
 FROM scratch AS production
 ARG CREATED="0000-00-00T00:00:00Z"
