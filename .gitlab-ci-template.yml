@@ -88,96 +88,172 @@ default:
     APP_IMAGE: dxas90/learn
     APP_NAME: learn
     CLUSTER_NAME: test-cluster-1
-  image: ubuntu:latest
+    KUBECTL_VERSION: "v1.31.0"
+    KIND_VERSION: "v0.24.0"
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: "/certs"
+  # Use a more specific image with better caching
+  image: docker:24.0.5-dind-alpine3.18
   services:
-    - docker:dind
+    - name: docker:24.0.5-dind-alpine3.18
+      alias: docker
+      command: ["--tls=false"]
   before_script:
-    # Install required tools
-    - apt-get update -qq && apt-get install -y -qq curl wget ca-certificates gnupg lsb-release
-    # Install Docker CLI
-    - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-    - echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-    - apt-get update -qq && apt-get install -y -qq docker-ce-cli
-    # Install kubectl
-    - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+    # Install required tools more efficiently
+    - apk add --no-cache curl ca-certificates bash
+    # Install kubectl with specific version for consistency
+    - curl -LO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
     - chmod +x kubectl && mv kubectl /usr/local/bin/
-    # Install Kind
-    - curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+    # Install Kind with specific version
+    - curl -Lo ./kind "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64"
     - chmod +x ./kind && mv ./kind /usr/local/bin/kind
+    # Verify installations
+    - kubectl version --client
+    - kind version
+    - docker version
   script:
-    # Set up variables
+    # Set up variables and verify environment
     - export LAST_COMMIT_HASH="${CI_COMMIT_SHORT_SHA}"
-    - echo "Building Docker image..."
-    # Build Docker image
-    - docker build -t ${APP_IMAGE}:${LAST_COMMIT_HASH} .
+    - echo "=== Starting Kubernetes Deployment Pipeline ==="
+    - 'echo "Commit Hash: ${LAST_COMMIT_HASH}"'
+    - 'echo "App Image: ${APP_IMAGE}"'
+    - 'echo "Cluster Name: ${CLUSTER_NAME}"'
+    # Build Docker image with better error handling
+    - echo "=== Building Docker Image ==="
+    - |
+      if ! docker build -t ${APP_IMAGE}:${LAST_COMMIT_HASH} .; then
+        echo "❌ Docker build failed"
+        exit 1
+      fi
     - docker tag ${APP_IMAGE}:${LAST_COMMIT_HASH} ${APP_IMAGE}:latest
-    # Create Kind cluster
-    - echo "Creating Kind cluster..."
-    - kind create cluster --name ${CLUSTER_NAME} --wait 5m
+    - echo "✅ Docker image built successfully"
+    # Create Kind cluster with configuration
+    - echo "=== Setting up Kind Cluster ==="
+    - |
+      cat > /tmp/kind-config.yaml <<EOF
+      kind: Cluster
+      apiVersion: kind.x-k8s.io/v1alpha4
+      nodes:
+      - role: control-plane
+        kubeadmConfigPatches:
+        - |
+          kind: InitConfiguration
+          nodeRegistration:
+            kubeletExtraArgs:
+              node-labels: "ingress-ready=true"
+        extraPortMappings:
+        - containerPort: 80
+          hostPort: 80
+          protocol: TCP
+        - containerPort: 443
+          hostPort: 443
+          protocol: TCP
+      EOF
+    - kind create cluster --name ${CLUSTER_NAME} --config /tmp/kind-config.yaml --wait 5m
+    - echo "✅ Kind cluster created successfully"
     # Load image into Kind cluster
-    - echo "Loading image into Kind cluster..."
+    - echo "=== Loading Docker Image into Cluster ==="
     - kind load docker-image ${APP_IMAGE}:${LAST_COMMIT_HASH} --name ${CLUSTER_NAME}
-    # Wait for nodes to be ready
-    - echo "Waiting for nodes to be ready..."
+    - echo "✅ Image loaded into cluster"
+    # Wait for cluster to be ready
+    - echo "=== Waiting for Cluster to be Ready ==="
     - kubectl wait --for=condition=Ready nodes --all --timeout=5m
-    - echo "Nodes:"
-    - kubectl get nodes
-    - echo "Cluster info:"
+    - kubectl get nodes -o wide
     - kubectl cluster-info
-    # Deploy metrics server
-    - echo "Deploying metrics server..."
-    - kubectl apply -f https://raw.githubusercontent.com/dxas90/k3d-cluster/refs/heads/master/k8s/monitoring/00_metrics-server.yaml
-    # Prepare E2E overlay with commit hash
-    - echo "Preparing E2E overlay with commit hash ${LAST_COMMIT_HASH}"
+    # Deploy metrics server with retry logic
+    - echo "=== Deploying Metrics Server ==="
+    - |
+      for i in {1..3}; do
+        if kubectl apply -f https://raw.githubusercontent.com/dxas90/k3d-cluster/refs/heads/master/k8s/monitoring/00_metrics-server.yaml; then
+          echo "✅ Metrics server deployed successfully"
+          break
+        else
+          echo "⚠️ Attempt $i failed, retrying..."
+          sleep 10
+        fi
+      done
+    # Prepare and deploy application
+    - echo "=== Preparing Application Deployment ==="
+    - 'echo "Using commit hash: ${LAST_COMMIT_HASH}"'
     - sed "s/\${LAST_COMMIT_HASH}/${LAST_COMMIT_HASH}/g" k8s/overlays/e2e/kustomization.yaml > /tmp/kustomization-e2e.yaml
     - cp /tmp/kustomization-e2e.yaml k8s/overlays/e2e/kustomization.yaml
-    # Deploy application
-    - echo "Deploying application with E2E overlay..."
+    - echo "Applying kustomization..."
     - kubectl apply -k k8s/overlays/e2e
-    # Wait for pods to be ready
-    - echo "Waiting for pods to be ready..."
-    - kubectl wait --for=condition=Ready pods --all --timeout=5m
+    - echo "✅ Application deployed"
+    # Wait for application to be ready
+    - echo "=== Waiting for Application to be Ready ==="
+    - kubectl wait --for=condition=Ready pods --all --timeout=10m
     - kubectl label ns default purpose=infrastructure
-    - kubectl get pods
-    # Run tests
-    - echo "Running smoke test..."
+    - kubectl get pods -o wide
+    # Run comprehensive testing suite
+    - echo "=== Running Test Suite ==="
+    - echo "📋 Running smoke tests..."
     - chmod +x scripts/smoke-test.sh && ./scripts/smoke-test.sh
-    - echo "Starting comprehensive end-to-end testing..."
+    - echo "📋 Running comprehensive E2E tests..."
     - chmod +x scripts/e2e-test.sh && ./scripts/e2e-test.sh
-    - echo "Starting WebSocket testing..."
+    - echo "📋 Running WebSocket tests..."
     - chmod +x scripts/websocket-test.sh && ./scripts/websocket-test.sh
-    # Final health check
-    - echo "Final deployment health check..."
-    - kubectl get all
+    - echo "✅ All tests completed successfully"
+    # Final comprehensive health check
+    - echo "=== Final Health Validation ==="
+    - kubectl get all -o wide
     - kubectl describe deployment learn
-    # Check if all pods are healthy
     - |
-      UNHEALTHY_PODS=$(kubectl get pods --field-selector=status.phase!=Running --no-headers | wc -l)
+      UNHEALTHY_PODS=$(kubectl get pods --field-selector=status.phase!=Running --no-headers 2>/dev/null | wc -l)
       if [ "$UNHEALTHY_PODS" -gt 0 ]; then
-        echo "Found unhealthy pods:"
+        echo "❌ Found $UNHEALTHY_PODS unhealthy pods:"
         kubectl get pods --field-selector=status.phase!=Running
         exit 1
       fi
-    - echo "✅ All deployment health checks passed!"
+    - echo "🎉 All deployment health checks passed!"
   after_script:
-    # Collect debug information on failure
+    # Enhanced debug information collection
     - |
       if [ "$CI_JOB_STATUS" = "failed" ]; then
-        echo "=== COLLECTING DEBUG INFORMATION ==="
+        echo "🔍 === COLLECTING COMPREHENSIVE DEBUG INFORMATION ==="
+        echo "--- Build Environment ---"
+        echo "Commit: ${CI_COMMIT_SHORT_SHA}"
+        echo "Branch: ${CI_COMMIT_REF_NAME}"
+        echo "Job: ${CI_JOB_NAME}"
+        
+        echo "--- Docker Images ---"
+        docker images | grep -E "(${APP_IMAGE}|kind)" || true
+        
         echo "--- Cluster Information ---"
         kubectl cluster-info || true
         kubectl get nodes -o wide || true
-        echo "--- All Resources ---"
+        kubectl version --short || true
+        
+        echo "--- All Kubernetes Resources ---"
         kubectl get all -o wide || true
-        echo "--- Pod Descriptions ---"
+        kubectl get events --sort-by='.metadata.creationTimestamp' -A || true
+        
+        echo "--- Pod Details ---"
         kubectl describe pods || true
+        
         echo "--- Pod Logs ---"
         for pod in $(kubectl get pods -o name 2>/dev/null || true); do
           echo "=== Logs for $pod ==="
-          kubectl logs $pod --all-containers=true || true
+          kubectl logs $pod --all-containers=true --previous=false || true
+          echo "=== Previous logs for $pod ==="
+          kubectl logs $pod --all-containers=true --previous=true || true
         done
-        echo "--- Events ---"
-        kubectl get events --sort-by='.metadata.creationTimestamp' || true
+        
+        echo "--- Service Details ---"
+        kubectl describe services || true
+        
+        echo "--- Deployment Details ---"
+        kubectl describe deployments || true
+        
+        echo "--- ConfigMaps and Secrets ---"
+        kubectl get configmaps,secrets || true
+        
+        echo "--- Kind Cluster Logs ---"
+        kind export logs /tmp/kind-logs --name ${CLUSTER_NAME} || true
+        
+        echo "🔍 === DEBUG INFORMATION COLLECTION COMPLETE ==="
       fi
-    # Cleanup Kind cluster
+    # Always cleanup Kind cluster to prevent resource leaks
+    - echo "🧹 Cleaning up Kind cluster..."
     - kind delete cluster --name ${CLUSTER_NAME} || true
+    - echo "✅ Cleanup completed"
