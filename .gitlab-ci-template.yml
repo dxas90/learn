@@ -21,7 +21,7 @@ default:
   stage: release
   image:
     name: goreleaser/goreleaser
-    entrypoint: ['']
+    entrypoint: [""]
   variables:
     # Disable shallow cloning so that goreleaser can diff between tags to
     # generate a changelog.
@@ -82,3 +82,178 @@ default:
     - if: $DOCKERFILE_PATH
     # custom build context without an explicit Dockerfile path
     - if: $KANIKO_BUILD_CONTEXT != $CI_PROJECT_DIR
+
+.k8s-deployment:
+  variables:
+    APP_IMAGE: dxas90/learn
+    APP_NAME: learn
+    CLUSTER_NAME: test-cluster-1
+    KUBECTL_VERSION: "v1.31.0"
+    KIND_VERSION: "v0.24.0"
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: "/certs"
+  # Use a more specific image with better caching
+  image: docker:24.0.5-dind-alpine3.18
+  services:
+    - name: docker:24.0.5-dind-alpine3.18
+      alias: docker
+      command: ["--tls=false"]
+  before_script:
+    # Install required tools more efficiently
+    - apk add --no-cache curl ca-certificates bash
+    # Install kubectl with specific version for consistency
+    - curl -LO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+    - chmod +x kubectl && mv kubectl /usr/local/bin/
+    # Install Kind with specific version
+    - curl -Lo ./kind "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64"
+    - chmod +x ./kind && mv ./kind /usr/local/bin/kind
+    # Verify installations
+    - kubectl version --client
+    - kind version
+    - docker version
+  script:
+    # Set up variables and verify environment
+    - export LAST_COMMIT_HASH="${CI_COMMIT_SHORT_SHA}"
+    - echo "=== Starting Kubernetes Deployment Pipeline ==="
+    - 'echo "Commit Hash: ${LAST_COMMIT_HASH}"'
+    - 'echo "App Image: ${APP_IMAGE}"'
+    - 'echo "Cluster Name: ${CLUSTER_NAME}"'
+    # Build Docker image with better error handling
+    - echo "=== Building Docker Image ==="
+    - |
+      if ! docker build -t ${APP_IMAGE}:${LAST_COMMIT_HASH} .; then
+        echo "❌ Docker build failed"
+        exit 1
+      fi
+    - docker tag ${APP_IMAGE}:${LAST_COMMIT_HASH} ${APP_IMAGE}:latest
+    - echo "✅ Docker image built successfully"
+    # Create Kind cluster with configuration
+    - echo "=== Setting up Kind Cluster ==="
+    - |
+      cat > /tmp/kind-config.yaml <<EOF
+      kind: Cluster
+      apiVersion: kind.x-k8s.io/v1alpha4
+      nodes:
+      - role: control-plane
+        kubeadmConfigPatches:
+        - |
+          kind: InitConfiguration
+          nodeRegistration:
+            kubeletExtraArgs:
+              node-labels: "ingress-ready=true"
+        extraPortMappings:
+        - containerPort: 80
+          hostPort: 80
+          protocol: TCP
+        - containerPort: 443
+          hostPort: 443
+          protocol: TCP
+      EOF
+    - kind create cluster --name ${CLUSTER_NAME} --config /tmp/kind-config.yaml --wait 5m
+    - echo "✅ Kind cluster created successfully"
+    # Load image into Kind cluster
+    - echo "=== Loading Docker Image into Cluster ==="
+    - kind load docker-image ${APP_IMAGE}:${LAST_COMMIT_HASH} --name ${CLUSTER_NAME}
+    - echo "✅ Image loaded into cluster"
+    # Wait for cluster to be ready
+    - echo "=== Waiting for Cluster to be Ready ==="
+    - kubectl wait --for=condition=Ready nodes --all --timeout=5m
+    - kubectl get nodes -o wide
+    - kubectl cluster-info
+    # Deploy metrics server with retry logic
+    - echo "=== Deploying Metrics Server ==="
+    - |
+      for i in {1..3}; do
+        if kubectl apply -f https://raw.githubusercontent.com/dxas90/k3d-cluster/refs/heads/master/k8s/monitoring/00_metrics-server.yaml; then
+          echo "✅ Metrics server deployed successfully"
+          break
+        else
+          echo "⚠️ Attempt $i failed, retrying..."
+          sleep 10
+        fi
+      done
+    # Prepare and deploy application
+    - echo "=== Preparing Application Deployment ==="
+    - 'echo "Using commit hash: ${LAST_COMMIT_HASH}"'
+    - sed "s/\${LAST_COMMIT_HASH}/${LAST_COMMIT_HASH}/g" k8s/overlays/e2e/kustomization.yaml > /tmp/kustomization-e2e.yaml
+    - cp /tmp/kustomization-e2e.yaml k8s/overlays/e2e/kustomization.yaml
+    - echo "Applying kustomization..."
+    - kubectl apply -k k8s/overlays/e2e
+    - echo "✅ Application deployed"
+    # Wait for application to be ready
+    - echo "=== Waiting for Application to be Ready ==="
+    - kubectl wait --for=condition=Ready pods --all --timeout=10m
+    - kubectl label ns default purpose=infrastructure
+    - kubectl get pods -o wide
+    # Run comprehensive testing suite
+    - echo "=== Running Test Suite ==="
+    - echo "📋 Running smoke tests..."
+    - chmod +x scripts/smoke-test.sh && ./scripts/smoke-test.sh
+    - echo "📋 Running comprehensive E2E tests..."
+    - chmod +x scripts/e2e-test.sh && ./scripts/e2e-test.sh
+    - echo "📋 Running WebSocket tests..."
+    - chmod +x scripts/websocket-test.sh && ./scripts/websocket-test.sh
+    - echo "✅ All tests completed successfully"
+    # Final comprehensive health check
+    - echo "=== Final Health Validation ==="
+    - kubectl get all -o wide
+    - kubectl describe deployment learn
+    - |
+      UNHEALTHY_PODS=$(kubectl get pods --field-selector=status.phase!=Running --no-headers 2>/dev/null | wc -l)
+      if [ "$UNHEALTHY_PODS" -gt 0 ]; then
+        echo "❌ Found $UNHEALTHY_PODS unhealthy pods:"
+        kubectl get pods --field-selector=status.phase!=Running
+        exit 1
+      fi
+    - echo "🎉 All deployment health checks passed!"
+  after_script:
+    # Enhanced debug information collection
+    - |
+      if [ "$CI_JOB_STATUS" = "failed" ]; then
+        echo "🔍 === COLLECTING COMPREHENSIVE DEBUG INFORMATION ==="
+        echo "--- Build Environment ---"
+        echo "Commit: ${CI_COMMIT_SHORT_SHA}"
+        echo "Branch: ${CI_COMMIT_REF_NAME}"
+        echo "Job: ${CI_JOB_NAME}"
+        
+        echo "--- Docker Images ---"
+        docker images | grep -E "(${APP_IMAGE}|kind)" || true
+        
+        echo "--- Cluster Information ---"
+        kubectl cluster-info || true
+        kubectl get nodes -o wide || true
+        kubectl version --short || true
+        
+        echo "--- All Kubernetes Resources ---"
+        kubectl get all -o wide || true
+        kubectl get events --sort-by='.metadata.creationTimestamp' -A || true
+        
+        echo "--- Pod Details ---"
+        kubectl describe pods || true
+        
+        echo "--- Pod Logs ---"
+        for pod in $(kubectl get pods -o name 2>/dev/null || true); do
+          echo "=== Logs for $pod ==="
+          kubectl logs $pod --all-containers=true --previous=false || true
+          echo "=== Previous logs for $pod ==="
+          kubectl logs $pod --all-containers=true --previous=true || true
+        done
+        
+        echo "--- Service Details ---"
+        kubectl describe services || true
+        
+        echo "--- Deployment Details ---"
+        kubectl describe deployments || true
+        
+        echo "--- ConfigMaps and Secrets ---"
+        kubectl get configmaps,secrets || true
+        
+        echo "--- Kind Cluster Logs ---"
+        kind export logs /tmp/kind-logs --name ${CLUSTER_NAME} || true
+        
+        echo "🔍 === DEBUG INFORMATION COLLECTION COMPLETE ==="
+      fi
+    # Always cleanup Kind cluster to prevent resource leaks
+    - echo "🧹 Cleaning up Kind cluster..."
+    - kind delete cluster --name ${CLUSTER_NAME} || true
+    - echo "✅ Cleanup completed"

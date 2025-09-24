@@ -1,9 +1,9 @@
 name: KinD Deployment
 on:
   push:
-    branches: [master]
+    branches: [develop]
   pull_request:
-    branches: [master]
+    branches: [main]
 env:
   APP_IMAGE: dxas90/learn
 jobs:
