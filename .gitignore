@@ -636,4 +636,3 @@ Temporary Items
 
 # Ignore DevSpace cache and log folder
 .devspace/
-vendor/
