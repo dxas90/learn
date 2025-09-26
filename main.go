@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -129,6 +131,53 @@ func fibonacci(n int) int {
 	return b
 }
 
+// StressStack recursively allocates stack frames to grow goroutine stack memory.
+func stressStack(depth int) int {
+	// allocate some local variables to consume stack
+	var a, b, c, d, e, f, g, h, i, j int
+	_ = a + b + c + d + e + f + g + h + i + j
+
+	if depth > 0 {
+		return stressStack(depth - 1)
+	}
+	return 0
+}
+
+// LaunchStackStress launches multiple goroutines that recursively grow stacks
+func launchStackStress(goroutines int, depth int, duration time.Duration) {
+	log.Printf("Launching %d goroutines, recursion depth %d for %v", goroutines, depth, duration)
+
+	done := make(chan bool)
+	var wg sync.WaitGroup
+
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			log.Printf("Goroutine %d started", id)
+			start := time.Now()
+			for time.Since(start) < duration {
+				select {
+				case <-done:
+					return
+				default:
+					stressStack(depth)
+					time.Sleep(10 * time.Millisecond)
+				}
+			}
+			log.Printf("Goroutine %d finished", id)
+		}(i)
+	}
+
+	// Wait for completion or timeout
+	go func() {
+		time.Sleep(duration)
+		close(done)
+	}()
+
+	wg.Wait()
+}
+
 // WebSocket handler
 func websocketHandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -220,6 +269,63 @@ func helloHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func stackStressHandler(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	goroutinesStr := r.URL.Query().Get("goroutines")
+	depthStr := r.URL.Query().Get("depth")
+	durationStr := r.URL.Query().Get("duration")
+
+	// Set default values
+	goroutines := 5
+	depth := 100
+	duration := 5 * time.Second
+
+	// Parse parameters with validation
+	if goroutinesStr != "" {
+		if g, err := strconv.Atoi(goroutinesStr); err == nil && g > 0 && g <= 50 {
+			goroutines = g
+		}
+	}
+	if depthStr != "" {
+		if d, err := strconv.Atoi(depthStr); err == nil && d > 0 && d <= 2000 {
+			depth = d
+		}
+	}
+	if durationStr != "" {
+		if dur, err := time.ParseDuration(durationStr); err == nil && dur > 0 && dur <= 30*time.Second {
+			duration = dur
+		}
+	}
+
+	// Get initial memory stats
+	var initialStats runtime.MemStats
+	runtime.ReadMemStats(&initialStats)
+
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprintf(w, `{"status":"starting","goroutines":%d,"depth":%d,"duration":"%v","initial_stack_kb":%d,"initial_goroutines":%d}`,
+		goroutines, depth, duration, initialStats.StackInuse/1024, runtime.NumGoroutine())
+
+	// Flush the response to send initial status
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+
+	// Launch the stress test
+	start := time.Now()
+	launchStackStress(goroutines, depth, duration)
+	elapsed := time.Since(start)
+
+	// Get final memory stats
+	var finalStats runtime.MemStats
+	runtime.ReadMemStats(&finalStats)
+
+	// Send final status
+	fmt.Fprintf(w, `
+{"status":"completed","elapsed":"%v","final_stack_kb":%d,"final_goroutines":%d,"stack_diff_kb":%d}`,
+		elapsed, finalStats.StackInuse/1024, runtime.NumGoroutine(),
+		int(finalStats.StackInuse-initialStats.StackInuse)/1024)
+}
+
 // Embed static files
 //
 //go:embed static/* templates
@@ -252,6 +358,8 @@ func main() {
 	// HTTP routes
 	http.Handle("/", recoverHandler(withLogging(helloHandler)))
 	http.Handle("/fib", recoverHandler(withLogging(fibHandler)))
+	http.Handle("/ping", recoverHandler(withLogging(pongHandler)))
+	http.Handle("/stack-stress", recoverHandler(withLogging(stackStressHandler)))
 	http.Handle("/healthz", recoverHandler(healthCheckHandler))
 	http.Handle("/metrics", promhttp.Handler())
 	http.Handle("/redis", recoverHandler(withLogging(redisHandler)))

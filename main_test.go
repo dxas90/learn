@@ -38,3 +38,48 @@ func TestHealthRoute(t *testing.T) {
 	assert.Equal(t, 200, w.Code)
 	assert.Contains(t, w.Body.String(), "alive")
 }
+
+func TestStackStressRoute(t *testing.T) {
+	handler := http.HandlerFunc(stackStressHandler)
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/stack-stress?goroutines=2&depth=10&duration=1s", nil)
+	handler.ServeHTTP(w, req)
+
+	assert.Equal(t, 200, w.Code)
+	body := w.Body.String()
+	assert.Contains(t, body, "starting")
+	assert.Contains(t, body, "completed")
+	assert.Contains(t, body, "goroutines")
+}
+
+func TestStackStressRouteDefaultParams(t *testing.T) {
+	handler := http.HandlerFunc(stackStressHandler)
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/stack-stress", nil)
+	handler.ServeHTTP(w, req)
+
+	assert.Equal(t, 200, w.Code)
+	body := w.Body.String()
+	assert.Contains(t, body, "starting")
+	assert.Contains(t, body, "completed")
+}
+
+func TestStressStackFunction(t *testing.T) {
+	// Test the stressStack function directly
+	result := stressStack(5)
+	assert.Equal(t, 0, result) // Function should return 0
+}
+
+func TestStackStressRouteInvalidParams(t *testing.T) {
+	handler := http.HandlerFunc(stackStressHandler)
+	w := httptest.NewRecorder()
+	// Test with invalid parameters - should use defaults
+	req, _ := http.NewRequest("GET", "/stack-stress?goroutines=invalid&depth=-1&duration=invalid", nil)
+	handler.ServeHTTP(w, req)
+
+	assert.Equal(t, 200, w.Code)
+	body := w.Body.String()
+	// Should use default values and still work
+	assert.Contains(t, body, "starting")
+	assert.Contains(t, body, "completed")
+}
