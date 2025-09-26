@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -37,4 +38,13 @@ func TestHealthRoute(t *testing.T) {
 
 	assert.Equal(t, 200, w.Code)
 	assert.Contains(t, w.Body.String(), "alive")
+}
+
+func TestHandleError(t *testing.T) {
+	// Test with nil error
+	handleError(nil) // Should not panic or log
+
+	// Test with actual error
+	testErr := errors.New("test error")
+	handleError(testErr) // Should log the error without panicking
 }

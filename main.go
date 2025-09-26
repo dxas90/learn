@@ -76,6 +76,7 @@ func initRedisClient() {
 		})
 
 		if _, err := rdb.Ping(ctx).Result(); err != nil {
+			handleError(err) // Use new error handler
 			log.Println("Redis connection failed, using default value")
 			rdb = nil
 		}
@@ -90,7 +91,7 @@ func getValue(key string) string {
 			return val
 		}
 		if err != redis.Nil {
-			log.Println("Redis error:", err)
+			handleError(err) // Use new error handler
 		}
 	}
 	return defaultValue
@@ -114,6 +115,13 @@ func recoverHandler(next http.HandlerFunc) http.HandlerFunc {
 			}
 		}()
 		next.ServeHTTP(w, r)
+	}
+}
+
+// Error handler function for centralized error management
+func handleError(err error) {
+	if err != nil {
+		log.Printf("Error occurred: %v", err)
 	}
 }
 
