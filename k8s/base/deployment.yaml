@@ -45,9 +45,9 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: GOGC # https://weaviate.io/blog/gomemlimit-a-game-changer-for-high-memory-applications
-              value: 25
+              value: "25"
             - name: GOMEMLIMIT
-              value: 100MiB
+              value: "100MiB"
           envFrom:
             - configMapRef:
                 name: learn-config
