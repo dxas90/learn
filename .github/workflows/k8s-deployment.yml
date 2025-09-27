@@ -22,6 +22,7 @@ jobs:
         with:
           cluster_name: test-cluster-1
           verbosity: 1
+          config: .github/kind-config.yaml
 
       - name: "Build and Load Docker Image"
         run: |
