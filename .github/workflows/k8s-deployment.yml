@@ -36,14 +36,19 @@ jobs:
         run: |
           mkdir -p $HOME/.kube
           kind get kubeconfig --name test-cluster-1 > $HOME/.kube/config
+          echo "KUBECONFIG=$HOME/.kube/config" >> $GITHUB_ENV
 
-      - name: Fix kubeconfig server for GitHub or Forgejo
+      - name: Fix kubeconfig server for GitHub Actions or Forgejo Docker
         run: |
-          if [ "${GITHUB_ACTIONS}" = "true" ]; then
-            echo "Running on GitHub Actions, leaving server as 0.0.0.0"
+          API_PORT=$(grep "server:" $HOME/.kube/config | sed 's/.*://')
+          # Check if 0.0.0.0 is reachable
+          if nc -zv 0.0.0.0 $API_PORT >/dev/null 2>&1; then
+            echo "✅ 0.0.0.0 is reachable — likely GitHub Actions, leaving kubeconfig as-is"
           else
-            echo "Running on Forgejo, switching to 10.19.19.109"
-            sed -i 's/0\.0\.0\.0/10.19.19.109/g' $HOME/.kube/config
+            # Forgejo Docker runner — detect Docker host IP
+            DOCKER_HOST_IP=$(ip route | awk '/default/ { print $3 }')
+            echo "✅ Rewriting kubeconfig to use Docker host IP: $DOCKER_HOST_IP"
+            sed -i "s/0\.0\.0\.0/$DOCKER_HOST_IP/g" $HOME/.kube/config
           fi
 
       - name: "Deploy to KinD"
