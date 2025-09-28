@@ -32,6 +32,20 @@ jobs:
           echo "Loading image into KinD cluster..."
           kind load docker-image ${APP_IMAGE}:${LAST_COMMIT_HASH} --name test-cluster-1
 
+      - name: Export kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          kind get kubeconfig --name test-cluster-1 > $HOME/.kube/config
+
+      - name: Fix kubeconfig server for GitHub or Forgejo
+        run: |
+          if [ "${GITHUB_ACTIONS}" = "true" ]; then
+            echo "Running on GitHub Actions, leaving server as 0.0.0.0"
+          else
+            echo "Running on Forgejo, switching to 10.19.19.109"
+            sed -i 's/0\.0\.0\.0/10.19.19.109/g' $HOME/.kube/config
+          fi
+
       - name: "Deploy to KinD"
         id: deploy
         run: |
