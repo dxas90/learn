@@ -3,3 +3,16 @@ kind: Cluster
 networking:
   apiServerAddress: 0.0.0.0
   kubeProxyMode: "nftables"
+nodes:
+  - role: control-plane
+kubeadmConfigPatchesJSON6902:
+  - group: kubeadm.k8s.io
+    version: v1beta3
+    kind: ClusterConfiguration
+    patch: |
+      - op: add
+        path: /apiServer/certSANs/-
+        value: 127.0.0.1
+      - op: add
+        path: /apiServer/certSANs/-
+        value: 172.22.0.1
