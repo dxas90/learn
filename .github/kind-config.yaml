@@ -5,3 +5,11 @@ networking:
   kubeProxyMode: "nftables"
 nodes:
   - role: control-plane
+kubeadmConfigPatchesJSON6902:
+  - group: kubeadm.k8s.io
+    version: v1beta2
+    kind: ClusterConfiguration
+    patch: |
+      - op: add
+        path: /apiServer/certSANs/-
+        value: host.docker.internal
