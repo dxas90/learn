@@ -32,6 +32,16 @@ jobs:
           echo "Loading image into KinD cluster..."
           kind load docker-image ${APP_IMAGE}:${LAST_COMMIT_HASH} --name test-cluster-1
 
+      - name: Export kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          kind get kubeconfig --name test-cluster-1 > $HOME/.kube/config
+
+          if [ -n "${FORGRJO_HOMELAB}" ]; then
+            echo "✅ Forgejo runner detected: switching to host.docker.internal"
+            sed -i 's/0\.0\.0\.0/host.docker.internal/g' $HOME/.kube/config
+          fi
+
       - name: "Deploy to KinD"
         id: deploy
         run: |
