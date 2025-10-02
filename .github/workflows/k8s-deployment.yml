@@ -37,9 +37,10 @@ jobs:
           mkdir -p $HOME/.kube
           kind get kubeconfig --name test-cluster-1 > $HOME/.kube/config
 
-          if [ -n "${FORGEJO_HOMELAB}" ]; then
-            echo "✅ Forgejo runner detected: switching to host.docker.internal"
-            sed -i 's/0\.0\.0\.0/host.docker.internal/g' $HOME/.kube/config
+          if [ -n "${FORGRJO_HOMELAB}" ]; then
+            GATEWAY_IP=$(ip route show default | awk '{print $3}')
+            echo "✅ Forgejo runner detected: using gateway $GATEWAY_IP"
+            sed -i "s/0\.0\.0\.0/${GATEWAY_IP}/g" $HOME/.kube/config
           fi
 
       - name: "Deploy to KinD"
