@@ -17,7 +17,7 @@ initialize:
   image: golang:alpine
   script:
     - echo "Initializing pipeline for ${CI_COMMIT_REF_NAME}"
-    - echo "Commit SHA: ${CI_COMMIT_SHORT_SHA}"
+    - echo "Commit SHA -> ${CI_COMMIT_SHORT_SHA}"
     - go version
     - apk add --no-cache git ca-certificates
     - go mod download
@@ -47,8 +47,8 @@ notify:
   image: alpine:latest
   script:
     - echo "Pipeline completed for ${CI_COMMIT_REF_NAME}"
-    - echo "Commit SHA: ${CI_COMMIT_SHORT_SHA}"
-    - echo "Job status: ${CI_JOB_STATUS}"
+    - echo "Commit SHA -> ${CI_COMMIT_SHORT_SHA}"
+    - echo "Job status -> ${CI_JOB_STATUS}"
   when: always
 
 # Containerize stage - runs only on tags
@@ -94,7 +94,7 @@ promote:
         SANITIZED="${NOSLASH//[^a-zA-Z0-9\-\.]/}"
         SOURCE_VERSION="$SANITIZED"
       else
-        echo "Error: This job should only run on tags"
+        echo "Error -> This job should only run on tags"
         exit 1
       fi
     - echo "Promoting image ${CI_REGISTRY_IMAGE}:${SOURCE_VERSION} to production"
