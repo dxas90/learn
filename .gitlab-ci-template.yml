@@ -93,9 +93,9 @@ default:
     DOCKER_DRIVER: overlay2
     DOCKER_TLS_CERTDIR: "/certs"
   # Use a more specific image with better caching
-  image: docker:24.0.5-dind-alpine3.18
+  image: docker:24.0.7-dind-alpine3.18
   services:
-    - name: docker:24.0.5-dind-alpine3.18
+    - name: docker:24.0.7-dind-alpine3.18
       alias: docker
       command: ["--tls=false"]
   before_script:
