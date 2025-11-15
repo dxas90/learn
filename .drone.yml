@@ -29,7 +29,7 @@ steps:
        - tag
 
   - name: Get all code dependencies [CODE]
-    image: golang:1.20.2-alpine3.16
+    image: golang:1.20.4-alpine3.16
     commands:
       - go mod tidy
       - go mod vendor
@@ -40,7 +40,7 @@ steps:
       - Fetch all the code information [CODE]
 
   - name: Run UnitTest [TEST]
-    image: golang:1.20.2-alpine3.16
+    image: golang:1.20.4-alpine3.16
     commands:
       - go test -v
     volumes:
@@ -50,7 +50,7 @@ steps:
       - Get all code dependencies [CODE]
 
   - name: Run StaticCheck [LINT]
-    image: golang:1.20.2-alpine3.16
+    image: golang:1.20.4-alpine3.16
     failure: ignore
     commands:
       - which staticcheck || go install honnef.co/go/tools/cmd/staticcheck@latest
@@ -62,7 +62,7 @@ steps:
       - Get all code dependencies [CODE]
 
   - name: Build the code [BUILD]
-    image: golang:1.20.2-alpine3.16
+    image: golang:1.20.4-alpine3.16
     commands:
       - go build
     volumes:
