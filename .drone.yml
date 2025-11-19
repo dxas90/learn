@@ -20,7 +20,7 @@ volumes:
 
 steps:
   - name: Fetch all the code information [CODE]
-    image: alpine/git:2.36.3
+    image: alpine/git:v2.49.1
     commands:
       - git fetch --tags
       - rm -f .tags
