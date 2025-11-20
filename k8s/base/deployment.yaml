@@ -76,11 +76,17 @@ spec:
               valueFrom:
                 fieldRef:
                   apiVersion: v1
-                  fieldPath: metadata.name
-            - name: GOGC # https://weaviate.io/blog/gomemlimit-a-game-changer-for-high-memory-applications
-              value: "25"
+                  fieldPath: metadata.name # https://weaviate.io/blog/gomemlimit-a-game-changer-for-high-memory-applications
             - name: GOMEMLIMIT
-              value: "256MiB"
+              valueFrom:
+                resourceFieldRef:
+                  divisor: '0'
+                  resource: limits.memory
+            - name: GOMAXPROCS
+              valueFrom:
+                resourceFieldRef:
+                  divisor: '0'
+                  resource: limits.cpu
           envFrom:
             - configMapRef:
                 name: learn-config
