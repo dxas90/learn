@@ -78,9 +78,9 @@ deployment-staging:
 # Promote stage - manual job to promote the image from containerize step
 promote:
   stage: promote
-  image: docker:24-cli
+  image: docker:29-cli
   services:
-    - docker:24-dind
+    - docker:29-dind
   variables:
     DOCKER_DRIVER: overlay2
     DOCKER_TLS_CERTDIR: "/certs"
