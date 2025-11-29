@@ -9,6 +9,7 @@ data:
   REDIS_DSN: redis://redis:6379?timeout=0.5
   MONGODB_URL: mongodb://mongodb:27017
   MAILER_URL: smtp://mail-server:1025
+  NATS_URL:  nats://nats:4222
 {{- with .Values.extraEnv }}
   {{- toYaml . | nindent 2 }}
 {{- end }}
