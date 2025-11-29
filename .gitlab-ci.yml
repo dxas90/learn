@@ -5,10 +5,10 @@ include:
 stages:
   - initialize
   - lint
+  - build
   - test
   - security
   - helm-test
-  - build
   - containerize
   - deployment
   - promote
