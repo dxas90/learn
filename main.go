@@ -59,11 +59,10 @@ func getEnv(key, fallback string) string {
 // Get environment variable as integer with fallback
 func getEnvInt(key string, fallback int) int {
 	if value, exists := os.LookupEnv(key); exists {
-		var intValue int
-		_, err := fmt.Sscanf(value, "%d", &intValue)
-		if err == nil {
+		if intValue, err := strconv.Atoi(value); err == nil {
 			return intValue
 		}
+		log.Printf("Warning: Invalid integer value for %s, using fallback %d", key, fallback)
 	}
 	return fallback
 }
@@ -161,7 +160,7 @@ func launchStackStress(goroutines int, depth int, duration time.Duration) {
 				case <-done:
 					return
 				default:
-					stressStack(depth)
+					_ = stressStack(depth)
 					time.Sleep(10 * time.Millisecond)
 				}
 			}
@@ -368,6 +367,12 @@ func main() {
 
 	// Start Redis subscriber in a Goroutine
 	go subscribeToRedis()
+
+	// Start NATS subscribers if enabled
+	NatsSubscribe()
+
+	// Start NATS publisher if enabled
+	go NatsPublishLoop()
 
 	// Start server
 	log.Printf("Starting server on port %s\n", port)
