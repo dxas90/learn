@@ -1,0 +1,10 @@
+env:
+  variables:
+    ENABLE_HEALTH_CHECKS: "true"
+    ENABLE_METRICS: "true"
+    ENABLE_DETAILED_ERRORS: "false"
+extraEnv:
+  CORS_ORIGIN: "*"
+  SESSION_SECRET: your-super-secret-session-key-here
+  LOG_LEVEL: "info"
+  LOG_FORMAT: "combined"

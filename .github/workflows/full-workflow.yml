@@ -1,0 +1,365 @@
+name: Docker Build and Security Scan
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  GO_VERSION: '1.25.x'
+  APP_NAME: learn
+  CLUSTER_NAME: test-cluster
+
+jobs:
+  lint:
+    name: Code Quality & Linting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Install linters
+        run: |
+          go install golang.org/x/lint/golint@latest
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+
+      - name: Run go fmt
+        run: |
+          if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+            echo "Code is not formatted:"
+            gofmt -s -l .
+            exit 1
+          fi
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run golint
+        run: golint -set_exit_status ./...
+
+      - name: Run staticcheck
+        run: staticcheck ./...
+
+      - name: Verify dependencies
+        run: go mod verify
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.25.x']
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Clean build cache
+        run: go clean -cache -testcache
+
+      - name: Run tests with coverage
+        run: go test ./... -v -coverprofile=coverage.out -covermode=atomic
+
+      - name: Generate coverage report
+        run: go tool cover -func=coverage.out
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          file: ./coverage.out
+          flags: unittests
+          name: codecov-go-${{ matrix.go-version }}
+
+  security-scan:
+    name: Security Vulnerability Scan
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+      - name: Run gosec security scanner
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          gosec -fmt=json -out=gosec-results.json ./... || true
+
+  helm-test:
+    name: Helm Chart Testing
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'latest'
+
+      - name: Install Helm unittest plugin
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest.git --verify=false
+
+      - name: Run Helm unit tests
+        run: helm unittest charts/learn
+
+      - name: Lint Helm chart
+        run: helm lint charts/learn
+
+  build:
+    name: Build and Scan Docker Image
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+      actions: read  # Required for CodeQL upload-sarif action
+      checks: write  # Required for publishing test results
+      pull-requests: write  # Required for PR comments
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+            VCS_REF=${{ github.sha }}
+            VERSION=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.version'] }}
+
+      - name: Extract SHA tag for Trivy
+        if: github.event_name != 'pull_request'
+        id: extract-sha-tag
+        run: |
+          echo "sha-tag=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+          echo "Found SHA tag: ${SHA_TAG}"
+
+      - name: Run Trivy vulnerability scanner
+        if: github.event_name != 'pull_request'  # only run Trivy when image is pushed (not on PRs)
+        id: trivy
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: ${{ steps.extract-sha-tag.outputs.sha-tag }}
+          format: 'sarif'
+          vuln-type: 'library'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        if: github.event_name != 'pull_request' && steps.trivy.outcome == 'success'
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'latest'
+
+      - name: Setup Kind Cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: ${{ env.CLUSTER_NAME }}
+          verbosity: 1
+          config: .github/kind-config.yaml
+
+      - name: Load Docker image into Kind
+        run: |
+          # Load image into Kind cluster
+          docker pull --platform linux/amd64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${GITHUB_SHA::7}
+          kind load docker-image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${GITHUB_SHA::7} --name ${{ env.CLUSTER_NAME }}
+
+      - name: Wait for cluster to be ready
+        run: |
+          echo "Waiting for nodes to be ready..."
+          kubectl wait --for=condition=Ready nodes --all --timeout=300s
+          echo "Cluster is ready!"
+
+      - name: Display cluster information
+        run: |
+          echo "=== Cluster Info ==="
+          kubectl cluster-info
+          echo "=== Nodes ==="
+          kubectl get nodes -o wide
+          echo "=== Pods (all namespaces) ==="
+          kubectl get pods --all-namespaces -o wide
+          echo "=== Services (all namespaces) ==="
+          kubectl get services --all-namespaces -o wide
+
+      - name: Deploy application using Helm
+        run: |
+          echo "Deploying application with Helm..."
+
+          helm upgrade --install ${{ env.APP_NAME }} ./charts/learn \
+            --set image.repository=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} \
+            --set image.tag=sha-${GITHUB_SHA::7} \
+            --set image.pullPolicy=Never \
+            --set replicaCount=1 \
+            --set autoscaling.enabled=false \
+            --set httproute.enabled=false \
+            -f .github/sample-env.yaml \
+            --wait \
+            --timeout 5m \
+            --debug
+
+          echo "=== Helm Release Status ==="
+          helm status ${{ env.APP_NAME }}
+
+          echo "=== Deployment Status ==="
+          kubectl get deployments
+          kubectl get pods -l app.kubernetes.io/name=learn
+          kubectl get services
+
+      - name: Verify Deployment Health
+        run: |
+          echo "=== Final Deployment Health Check ==="
+          # Check for any unhealthy pods
+          UNHEALTHY_PODS=$(kubectl get pods --field-selector=status.phase!=Running --no-headers | wc -l)
+          if [ "$UNHEALTHY_PODS" -gt 0 ]; then
+            echo "Found unhealthy pods:"
+            kubectl get pods --field-selector=status.phase!=Running
+            exit 1
+          fi
+          echo "✅ All deployment health checks passed!"
+
+      - name: Collect Logs and Debug Info
+        if: failure()
+        run: |
+          echo "=== COLLECTING DEBUG INFORMATION ==="
+          echo "--- Cluster Information ---"
+          kubectl cluster-info
+          kubectl get nodes -o wide
+
+          echo "--- All Resources ---"
+          kubectl get all -o wide
+
+          echo "--- Pod Descriptions ---"
+          kubectl describe pods
+
+          echo "--- Pod Logs ---"
+          for pod in $(kubectl get pods -o name); do
+            echo "=== Logs for $pod ==="
+            kubectl logs $pod --all-containers=true || true
+          done
+
+          echo "--- Events ---"
+          kubectl get events --sort-by='.metadata.creationTimestamp'
+
+      - name: Cleanup
+        if: always()
+        run: |
+          echo "Cleaning up resources..."
+          helm uninstall ${{ env.APP_NAME }} --ignore-not-found || true
+
+  cleanup-packages:
+    name: Cleanup Old Package Versions
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'pull_request'
+    permissions:
+      packages: write
+    steps:
+      - name: Delete old package versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: 'learn'
+          package-type: 'container'
+          min-versions-to-keep: 20
+          delete-only-untagged-versions: "true"
+
+  deploy-staging:
+    name: Deploy to Staging Environment
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: staging
+      url: http://api-stg-learn.example.com/healthz
+
+    steps:
+      - name: Trigger FluxCD reconcile for staging
+        if: success()
+        run: |
+          echo "Triggering FluxCD reconciliation for staging..."
+
+  deploy-production:
+    name: Deploy to Production Environment
+    runs-on: ubuntu-latest
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    # Environment protection rules can be configured in GitHub Settings > Environments > production
+    # to require manual approval before deployment
+    environment:
+      name: production
+      url: http://api-learn.example.com/healthz
+
+    steps:
+      - name: Trigger FluxCD reconcile for production
+        if: success()
+        run: |
+          echo "Triggering FluxCD reconciliation for production..."
