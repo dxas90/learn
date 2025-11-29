@@ -25,6 +25,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// Welcome holds the template data for rendering the index page
 type Welcome struct {
 	Name       string
 	Time       string

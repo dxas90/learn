@@ -12,6 +12,7 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
+// NatsResponse is a function type that processes NATS messages and returns a response
 type NatsResponse func(string) string
 
 func getNatsURL() string {
@@ -21,6 +22,7 @@ func getNatsURL() string {
 	return nats.DefaultURL
 }
 
+// NatsSubscribe initializes NATS subscriptions if NATS_SUBSCRIBE environment variable is true
 func NatsSubscribe() {
 	if os.Getenv("NATS_SUBSCRIBE") == "true" {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -43,6 +45,7 @@ func NatsSubscribe() {
 	}
 }
 
+// NatsPublishLoop continuously publishes messages to NATS if NATS_PUBLISH environment variable is true
 func NatsPublishLoop() {
 	if os.Getenv("NATS_PUBLISH") == "true" {
 		for {

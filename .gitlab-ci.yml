@@ -4,11 +4,8 @@ include:
 
 stages:
   - initialize
-  - lint
-  - build
   - test
-  - security
-  - helm-test
+  - build
   - containerize
   - deployment
   - promote
@@ -34,9 +31,33 @@ initialize:
       - go.sum
     expire_in: 1 hour
 
+# Test stage - runs on all commits to any branch
+test:
+  stage: test
+  image: golang:${GO_VERSION}-alpine
+  needs:
+    - initialize
+  before_script:
+    - apk add --no-cache git ca-certificates build-base
+  script:
+    - echo "Running tests with coverage..."
+    - go mod download
+    - go clean -cache -testcache
+    - go test ./... -v -coverprofile=coverage.out -covermode=atomic
+    - go tool cover -func=coverage.out
+    - echo "✅ Tests passed with coverage"
+  artifacts:
+    paths:
+      - coverage.out
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.out
+    expire_in: 1 week
+
 # Lint stage - runs on all commits to any branch
 lint:
-  stage: lint
+  stage: test
   image: golang:${GO_VERSION}-alpine
   needs:
     - initialize
@@ -58,7 +79,8 @@ lint:
     - go vet ./...
     - echo "✅ go vet passed"
     # Run golint
-    - golint -set_exit_status ./...
+    - export PATH=$PATH:~/go/bin
+    - golint -set_exit_status *.go
     - echo "✅ golint passed"
     # Run staticcheck
     - staticcheck ./...
@@ -67,44 +89,12 @@ lint:
     - go mod verify
     - echo "✅ Dependencies verified"
 
-# Build stage - runs on all commits to any branch
-build:
-  stage: build
-  extends: .go-build
-  needs:
-    - initialize
-    - lint
-
-# Test stage - runs on all commits to any branch
-test:
+# Security scan stage - runs on all commits
+security-scan:
   stage: test
   image: golang:${GO_VERSION}-alpine
   needs:
-    - build
-  before_script:
-    - apk add --no-cache git ca-certificates build-base
-  script:
-    - echo "Running tests with coverage..."
-    - go mod download
-    - go clean -cache -testcache
-    - go test ./... -v -coverprofile=coverage.out -covermode=atomic
-    - go tool cover -func=coverage.out
-    - echo "✅ Tests passed with coverage"
-  artifacts:
-    paths:
-      - coverage.out
-    reports:
-      coverage_report:
-        coverage_format: cobertura
-        path: coverage.out
-    expire_in: 1 week
-
-# Security scan stage - runs on all commits
-security-scan:
-  stage: security
-  image: golang:${GO_VERSION}-alpine
-  needs:
-    - test
+    - initialize
   before_script:
     - apk add --no-cache git ca-certificates build-base
   script:
@@ -126,7 +116,7 @@ security-scan:
 
 # Helm chart testing stage
 helm-test:
-  stage: helm-test
+  stage: test
   image: alpine/helm:latest
   needs:
     - lint
@@ -140,6 +130,14 @@ helm-test:
     # Lint Helm chart
     - helm lint charts/learn
     - echo "✅ Helm chart lint passed"
+
+# Build stage - runs on all commits to any branch
+build:
+  stage: build
+  extends: .go-build
+  needs:
+    - initialize
+    - lint
 
 # Notify stage - runs on all commits to any branch
 notify:
