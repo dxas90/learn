@@ -46,7 +46,7 @@ test:
     - go test ./... -v -coverprofile=coverage.txt -covermode=atomic
     - go tool cover -func=coverage.txt
     - go install github.com/boumenot/gocover-cobertura@latest
-    - go run github.com/boumenot/gocover-cobertura < coverage.txt > coverage.xml
+    - $(go env GOPATH)/bin/gocover-cobertura < coverage.txt > coverage.xml
     - echo "✅ Tests passed with coverage"
   coverage: '/total:\s+\(statements\)\s+(\d+\.\d+)%/'
   artifacts:
