@@ -40,57 +40,90 @@ default:
     - goreleaser release --clean
 
 .dockerize: # https://gitlab.com/gitlab-org/gitlab-foss/-/blob/master/lib/gitlab/ci/templates/Kaniko.gitlab-ci.yml
+  image: quay.io/buildah/stable:latest
+  stage: containerize
   variables:
-    # Additional options for Kaniko executor.
-    # For more details see https://github.com/GoogleContainerTools/kaniko/blob/master/README.md#additional-flags
-    KANIKO_ARGS: ""
-    KANIKO_BUILD_CONTEXT: $CI_PROJECT_DIR
-  image:
-    # For latest releases see https://github.com/GoogleContainerTools/kaniko/releases
-    # Only debug/*-debug versions of the Kaniko image are known to work within Gitlab CI
-    name: gcr.io/kaniko-project/executor:debug
-    entrypoint: [""]
+    STORAGE_DRIVER: vfs
+    BUILDAH_FORMAT: docker
+    BUILDAH_ISOLATION: chroot
+    BUILDAH_ARGS: ""
+    BUILD_CONTEXT: $CI_PROJECT_DIR
+    REGISTRY: $CI_REGISTRY
+    REGISTRY_USER: $CI_REGISTRY_USER
+    REGISTRY_PASSWORD: $CI_REGISTRY_PASSWORD
+    IMAGE_REPOSITORY: $CI_REGISTRY
+  artifacts:
+    reports:
+      dotenv: build.env
   script:
-    # if the user provide IMAGE_TAG then use it, else build the image tag using the default logic.
-    # Default logic
-    # Compose docker tag name
-    # Git Branch/Tag to Docker Image Tag Mapping
-    #   * Default Branch: main -> latest
-    #   * Branch: feature/my-feature -> branch-feature-my-feature
-    #   * Tag: v1.0.0/beta2 -> v1.0.0-beta2
+    # Locate Dockerfile / Containerfile
     - |
-      if [ -z ${IMAGE_TAG+x} ]; then
-        if [ "$CI_COMMIT_REF_NAME" = $CI_DEFAULT_BRANCH ]; then
-            VERSION="latest"
-          elif [ -n "$CI_COMMIT_TAG" ];then
-            NOSLASH=$(echo "$CI_COMMIT_TAG" | tr -s / - )
-            SANITIZED="${NOSLASH//[^a-zA-Z0-9\-\.]/}"
-            VERSION="$SANITIZED"
-          else \
-            NOSLASH=$(echo "$CI_COMMIT_REF_NAME" | tr -s / - )
-            SANITIZED="${NOSLASH//[^a-zA-Z0-9\-]/}"
-            VERSION="branch-$SANITIZED"
-          fi
-        export VERSION=$VERSION
-        export IMAGE_TAG=$CI_REGISTRY_IMAGE:$VERSION
+      if [ -z "$DOCKERFILE_PATH" ]; then
+        if [ -f "$BUILD_CONTEXT/Dockerfile" ]; then
+          DOCKERFILE_PATH="$BUILD_CONTEXT/Dockerfile"
+        elif [ -n "$CONTAINERFILE_PATH" ]; then
+          DOCKERFILE_PATH="$CONTAINERFILE_PATH"
+        elif [ -f "$BUILD_CONTEXT/Containerfile" ]; then
+          DOCKERFILE_PATH="$BUILD_CONTEXT/Containerfile"
+        else
+          echo "ERROR -> No Dockerfile or Containerfile found in build context"
+          exit 1
+        fi
       fi
-    - echo $IMAGE_TAG
-    - mkdir -p /kaniko/.docker
-    # https://docs.gitlab.com/ee/user/project/integrations/harbor.html#examples-of-harbor-variables-in-cicd
-    # Write credentials to access Gitlab Container Registry within the runner/ci
-    # - echo "{\"auths\":{\"$CI_REGISTRY\":{\"auth\":\"$(echo -n ${CI_REGISTRY_USER}:${CI_REGISTRY_PASSWORD} | base64 | tr -d '\n')\"}}}" > /kaniko/.docker/config.json
-    - echo "{\"auths\":{\"$HARBOR_HOST\":{\"auth\":\"$(echo -n ${HARBOR_USERNAME}:${HARBOR_PASSWORD} | base64 | tr -d '\n')\"},\"$CI_REGISTRY\":{\"auth\":\"$(echo -n ${CI_REGISTRY_USER}:${CI_REGISTRY_PASSWORD} | base64 | tr -d '\n')\"}}}" > /kaniko/.docker/config.json
-    # Build and push the container. To disable push add --no-push
-    - DOCKERFILE_PATH=${DOCKERFILE_PATH:-"$KANIKO_BUILD_CONTEXT/Dockerfile"}
-    - /kaniko/executor --context $KANIKO_BUILD_CONTEXT --dockerfile $DOCKERFILE_PATH --destination $IMAGE_TAG --destination "${HARBOR_HOST}/${HARBOR_PROJECT}/${CI_PROJECT_NAME}:${VERSION}" $KANIKO_ARGS
-  # Run this job in a branch/tag where a Dockerfile exists
+    - echo "Using Dockerfile -> $DOCKERFILE_PATH"
+
+    # Determine image tag
+    - |
+      if [ -z "${IMAGE_TAG+x}" ]; then
+        if [ "$CI_COMMIT_REF_NAME" = "$CI_DEFAULT_BRANCH" ]; then
+          VERSION="latest"
+        elif [ -n "$CI_COMMIT_TAG" ]; then
+          NOSLASH=$(echo "$CI_COMMIT_TAG" | tr -s / -)
+          SANITIZED="${NOSLASH//[^a-zA-Z0-9.-]/}"
+          VERSION="$SANITIZED"
+        else
+          NOSLASH=$(echo "$CI_COMMIT_REF_NAME" | tr -s / -)
+          SANITIZED="${NOSLASH//[^a-zA-Z0-9-]/}"
+          VERSION="branch-$SANITIZED"
+        fi
+        export VERSION
+        export IMAGE_TAG="${HARDCODE_IMAGE_TAG:-$IMAGE_REPOSITORY:$VERSION}"
+      fi
+
+    - echo "IMAGE_TAG=$IMAGE_TAG"
+    - echo "VERSION=$VERSION"
+    - echo "VERSION=$VERSION" >> build.env
+
+    # Login to registry (ECR/GitLab)
+    - buildah login -u "$REGISTRY_USER" --password "$REGISTRY_PASSWORD" "$REGISTRY"
+
+    # Build image
+    - |
+      buildah bud \
+        --isolation="$BUILDAH_ISOLATION" \
+        --storage-driver="$STORAGE_DRIVER" \
+        --format="$BUILDAH_FORMAT" \
+        --tls-verify=false \
+        -f "$DOCKERFILE_PATH" \
+        -t "$IMAGE_TAG" $BUILDAH_ARGS \
+        "$BUILD_CONTEXT"
+
+    # Push unless NO_PUSH is set
+    - |
+      if [ -z "$NO_PUSH" ]; then
+        echo "Pushing image to registry..."
+        buildah push "$IMAGE_TAG"
+      else
+        echo "Skipping push (NO_PUSH defined)"
+      fi
+
   rules:
     - exists:
         - Dockerfile
-    # custom Dockerfile path
+        - Containerfile
     - if: $DOCKERFILE_PATH
-    # custom build context without an explicit Dockerfile path
-    - if: $KANIKO_BUILD_CONTEXT != $CI_PROJECT_DIR
+    - if: $CONTAINERFILE_PATH
+    - if: $BUILD_CONTEXT != $CI_PROJECT_DIR
 
 .k8s-deployment:
   variables:
