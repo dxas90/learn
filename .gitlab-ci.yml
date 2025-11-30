@@ -43,16 +43,20 @@ test:
     - echo "Running tests with coverage..."
     - go mod download
     - go clean -cache -testcache
-    - go test ./... -v -coverprofile=coverage.out -covermode=atomic
-    - go tool cover -func=coverage.out
+    - go test ./... -v -coverprofile=coverage.txt -covermode=atomic
+    - go tool cover -func=coverage.txt
+    - go install github.com/boumenot/gocover-cobertura@latest
+    - go run github.com/boumenot/gocover-cobertura < coverage.txt > coverage.xml
     - echo "✅ Tests passed with coverage"
+  coverage: '/total:\s+\(statements\)\s+(\d+\.\d+)%/'
   artifacts:
     paths:
-      - coverage.out
+      - coverage.txt
+      - coverage.xml
     reports:
       coverage_report:
         coverage_format: cobertura
-        path: coverage.out
+        path: coverage.xml
     expire_in: 1 week
 
 # Lint stage - runs on all commits to any branch
