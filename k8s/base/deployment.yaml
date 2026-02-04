@@ -3,6 +3,13 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: learn
+  labels:
+    environment: dev #	Deployment stage
+    team: platform # Owning team
+    division: ops # Business unit
+    criticality: high # Business importance
+    data-sensitivity: pii # Data classification pii, pci, public
+    latency-sensitivity: realtime # Performance tier realtime, batch, async
 spec:
   replicas: 1
   selector:
