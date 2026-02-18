@@ -203,7 +203,7 @@ jobs:
         if: github.event_name != 'pull_request'  # only run Trivy when image is pushed (not on PRs)
         id: trivy
         continue-on-error: true
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@0.34.0
         with:
           image-ref: ${{ steps.extract-sha-tag.outputs.sha-tag }}
           format: 'sarif'
