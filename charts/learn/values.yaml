@@ -94,22 +94,26 @@ resources:
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 livenessProbe:
   httpGet:
-    path: /healthz
-    port: http
-  initialDelaySeconds: 3
-  periodSeconds: 3
-  failureThreshold: 2
+    path: /healthz        # Endpoint to verify the app is still alive
+    port: http            # Named port from container spec
+  periodSeconds: 10       # Check every 10 seconds
+  failureThreshold: 3     # Restart after 3 consecutive failures (~30s)
+  timeoutSeconds: 5       # Each check must respond within 5s
+
 readinessProbe:
-  tcpSocket:
-    port: 8080
-  initialDelaySeconds: 5
-  periodSeconds: 10
+  tcpSocket:             # Endpoint to decide if pod can receive traffic
+    port: http
+  periodSeconds: 5        # Check more frequently for faster traffic routing
+  failureThreshold: 2     # Remove from service after ~10s of failures
+  timeoutSeconds: 3       # Fail faster than liveness
+
 startupProbe:
   httpGet:
-    path: /healthz
+    path: /healthz        # Same endpoint, but used only during startup phase
     port: http
-  failureThreshold: 30
-  periodSeconds: 10
+  periodSeconds: 5        # Check every 5 seconds during startup
+  failureThreshold: 12    # Allow up to 12 failures → 60s startup window
+  timeoutSeconds: 5       # Each attempt has 5s timeout
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
