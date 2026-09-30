@@ -17,7 +17,7 @@ spec:
         - values.yaml
     path: charts/learn
     repoURL: 'https://github.com/dxas90/learn.git'
-    targetRevision: develop
+    targetRevision: refs/heads/develop
   syncPolicy:
     automated:
       prune: true
@@ -44,7 +44,7 @@ spec:
         - values.yaml
     path: charts/learn
     repoURL: 'https://github.com/dxas90/learn.git'
-    targetRevision: HEAD
+    targetRevision: refs/heads/main
   syncPolicy:
     automated:
       prune: true
