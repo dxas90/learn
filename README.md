@@ -61,52 +61,32 @@ oc new-app https://github.com/dxas90/learn.git
 ```
 
 ```mermaid
-
 flowchart TB
-    A["Create a Feature Branch"]
-    B["Push the Branch"]
-    C["Test / Verify"]
-    D["Merge to main"]
-    E["Test / Verify"]
-    F["Tag main"]
+    A["Create Branch"] --> B["Push Branch"]
+    B --> C["Test / Verify"]
+    C --> D["Merge to main"]
+    D --> E["Test / Verify"]
+    E --> F["Tag main"]
 
-    G["Build Container"]
-    H["Push Container"]
-    I["Deploy to<br/>Ephemeral Namespace"]
-
-    J["Build Container"]
-    K["Push Container"]
-    L["Deploy to<br/>Staging Namespace"]
-
-    M["Deploy to<br/>Production"]
-
-    A --> B --> C --> D --> E --> F
-
-    G --> H --> I
-    J --> K --> L
-
-    A --> G
-    B --> H
+    B --> G["Build Container"]
+    G --> H["Push Container"]
+    H --> I["Deploy Ephemeral"]
     I --> C
 
-    D --> J
+    D --> J["Build Container"]
+    J --> K["Push Container"]
+    K --> L["Deploy Staging"]
     L --> E
-    F --> M
 
-    C -.->|Retry| B
-    E -.->|Retry| D
-    F -.->|Next Feature| A
-
-    I ~~~ J
-    L ~~~ M
+    F --> M["Deploy Production"]
 
     classDef git fill:#dbeafe,stroke:#2563eb,color:#1e40af
     classDef ci fill:#dcfce7,stroke:#16a34a,color:#166534
-    classDef production fill:#fef3c7,stroke:#d97706,color:#92400e
+    classDef prod fill:#fef3c7,stroke:#d97706,color:#92400e
 
     class A,B,C,D,E,F git
     class G,H,I,J,K,L ci
-    class M production
+    class M prod
 ```
 
 ```text
