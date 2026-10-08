@@ -55,7 +55,7 @@ oc new-app https://github.com/dxas90/learn.git
 |               |              +--------------+
 |               |
 |        +------▼-----+             +---------------------+
-+--------+ Tag Master +------------►| Deploy Container to |
++--------+ Tag main   +------------►| Deploy Container to |
          +------------+             |     Production      |
                                     +---------------------+
 ```
