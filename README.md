@@ -40,7 +40,7 @@ oc new-app https://github.com/dxas90/learn.git
 |               |                    +-----------------+
 |               |             +-----►| Build Container |
 |      +--------▼--------+    |      +--------+--------+
-|  +--►+ Merge to Master +----+               |
+|  +--►+ Merge to main   +----+               |
 |  |   +--------+--------+                    |
 |  |            |                     +-------▼--------+
 |  |            |                     | Push Container |
@@ -58,6 +58,55 @@ oc new-app https://github.com/dxas90/learn.git
 +--------+ Tag Master +------------►| Deploy Container to |
          +------------+             |     Production      |
                                     +---------------------+
+```
+
+```mermaid
+
+flowchart TB
+    A["Create a Feature Branch"]
+    B["Push the Branch"]
+    C["Test / Verify"]
+    D["Merge to main"]
+    E["Test / Verify"]
+    F["Tag main"]
+
+    G["Build Container"]
+    H["Push Container"]
+    I["Deploy to<br/>Ephemeral Namespace"]
+
+    J["Build Container"]
+    K["Push Container"]
+    L["Deploy to<br/>Staging Namespace"]
+
+    M["Deploy to<br/>Production"]
+
+    A --> B --> C --> D --> E --> F
+
+    G --> H --> I
+    J --> K --> L
+
+    A --> G
+    B --> H
+    I --> C
+
+    D --> J
+    L --> E
+    F --> M
+
+    C -.->|Retry| B
+    E -.->|Retry| D
+    F -.->|Next Feature| A
+
+    I ~~~ J
+    L ~~~ M
+
+    classDef git fill:#dbeafe,stroke:#2563eb,color:#1e40af
+    classDef ci fill:#dcfce7,stroke:#16a34a,color:#166534
+    classDef production fill:#fef3c7,stroke:#d97706,color:#92400e
+
+    class A,B,C,D,E,F git
+    class G,H,I,J,K,L ci
+    class M production
 ```
 
 ### LICENCE
