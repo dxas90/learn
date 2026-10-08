@@ -109,6 +109,22 @@ flowchart TB
     class M production
 ```
 
+```text
+  Create Branch ──┬──> Build Container
+                  │
+  Push ──────┬────┼──> Push Container -> Deploy Ephemeral
+             │    │                            │
+             └──> Test/Verify <────────────────┘
+                       │
+                  Merge to main
+                       │
+                       ├──> Build Container -> Push Container -> Deploy Staging
+                       │                                            │
+                       └──> Test/Verify <───────────────────────────┘
+                                  │
+                             Tag main -> Deploy Production
+```
+
 ### LICENCE
 
 ![GitHub](https://img.shields.io/github/license/dxas90/learn)
